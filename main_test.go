@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"io"
 	"os"
@@ -100,6 +101,27 @@ func TestAuditCommand(t *testing.T) {
 	b.Reset()
 	if code, _ := runAudit([]string{"examples/crontab.sample"}, nil, &b); code != 1 || !strings.Contains(b.String(), "unescaped %") {
 		t.Errorf("sample: code %d\n%s", code, b.String())
+	}
+	// several files, crontab and workflow: one report each, exit 1 if any has a problem
+	b.Reset()
+	if code, err := runAudit([]string{"examples/nightly.yml", "examples/crontab.sample"}, nil, &b); code != 1 || err != nil ||
+		!strings.Contains(b.String(), "examples/nightly.yml\n3 schedule(s) in a GitHub Actions workflow") ||
+		!strings.Contains(b.String(), "\n\nexamples/crontab.sample\n10 job(s)") {
+		t.Errorf("two files: code %d err %v\n%s", code, err, b.String())
+	}
+	b.Reset()
+	if code, _ := runAudit([]string{"-json", "examples/nightly.yml", "examples/crontab.sample"}, nil, &b); code != 1 {
+		t.Errorf("two files -json: code %d", code)
+	}
+	var reps []struct {
+		File, Format string
+		Jobs         int
+	}
+	if err := json.Unmarshal([]byte(b.String()), &reps); err != nil || len(reps) != 2 || reps[0].Format != "github-actions" || reps[1].File != "examples/crontab.sample" || reps[1].Jobs != 10 {
+		t.Errorf("two files -json: %v %+v", err, reps)
+	}
+	if code, err := runImport([]string{"-dry-run", "examples/nightly.yml"}, nil, io.Discard, io.Discard); code != 2 || err == nil || !strings.Contains(err.Error(), "GitHub Actions workflow") {
+		t.Errorf("import of a workflow: code %d err %v", code, err)
 	}
 	if code, _ := runAudit([]string{"does-not-exist"}, nil, &b); code != 2 {
 		t.Errorf("missing file: code %d", code)

@@ -28,7 +28,8 @@ type Finding struct {
 
 // Report is the result of an audit.
 type Report struct {
-	Jobs     int       `json:"jobs"`
+	Format   string    `json:"format"` // crontab or github-actions
+	Jobs     int       `json:"jobs"`   // schedules, in a workflow
 	Findings []Finding `json:"findings"`
 }
 
@@ -56,9 +57,13 @@ const collisionWindow = 7 * 24 * time.Hour
 
 // Run audits crontab text.
 func Run(text string, o Options) *Report {
-	r := &Report{Findings: []Finding{}}
+	r := &Report{Format: "crontab", Findings: []Finding{}}
 	add := func(line int, level, f string, a ...any) {
 		r.Findings = append(r.Findings, Finding{line, level, fmt.Sprintf(f, a...)})
+	}
+	if IsWorkflow(text) {
+		runWorkflow(text, o.From, r, add)
+		return r
 	}
 	env := map[string]string{}
 	loc := o.Location
@@ -385,7 +390,11 @@ func (r *Report) Print(w io.Writer) {
 	for _, f := range r.Findings {
 		counts[f.Level]++
 	}
-	fmt.Fprintf(w, "%d job(s): %d error(s), %d warning(s), %d note(s)\n", r.Jobs, counts["error"], counts["warn"], counts["info"])
+	what := "job(s)"
+	if r.Format == "github-actions" {
+		what = "schedule(s) in a GitHub Actions workflow"
+	}
+	fmt.Fprintf(w, "%d %s: %d error(s), %d warning(s), %d note(s)\n", r.Jobs, what, counts["error"], counts["warn"], counts["info"])
 	for _, f := range r.Findings {
 		where := "file"
 		if f.Line > 0 {

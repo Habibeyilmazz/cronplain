@@ -31,7 +31,7 @@ const usage = `cronplain: understand, test and monitor scheduled jobs
 
 Usage:
   cronplain explain [flags] "EXPRESSION"   plain English, next runs, DST notes, lint
-  cronplain audit [flags] FILE|-          check a whole crontab
+  cronplain audit [flags] FILE...|-       check a crontab or a GitHub Actions workflow
   cronplain import [flags] FILE|-         monitor every job of a crontab: register
                                           them and print the crontab with pings added
   cronplain serve [flags]                 local web UI + heartbeat monitor
@@ -275,31 +275,53 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	if err != nil {
 		return flagExit(err), nil
 	}
-	if len(pos) != 1 {
-		return 2, fmt.Errorf("audit needs one file (or - for stdin)")
+	if len(pos) == 0 {
+		return 2, fmt.Errorf("audit needs a file (or - for stdin): a crontab or a GitHub Actions workflow")
 	}
 	loc, err := loadZone(*tz)
 	if err != nil {
 		return 2, err
 	}
-	data, err := readCrontab(pos[0], stdin)
-	if err != nil {
-		return 2, err
+	type fileReport struct {
+		File string `json:"file"`
+		*audit.Report
 	}
-	rep := audit.Run(string(data), audit.Options{System: *system, Location: loc, From: time.Now()})
+	var reps []fileReport
+	for _, name := range pos {
+		data, err := readCrontab(name, stdin)
+		if err != nil {
+			return 2, err
+		}
+		reps = append(reps, fileReport{name, audit.Run(string(data), audit.Options{System: *system, Location: loc, From: time.Now()})})
+	}
+	code := 0
+	for i, r := range reps {
+		if r.HasProblems() {
+			code = 1
+		}
+		if *asJSON {
+			continue
+		}
+		if i > 0 {
+			fmt.Fprintln(w)
+		}
+		if len(reps) > 1 {
+			fmt.Fprintf(w, "%s\n", r.File)
+		}
+		r.Print(w)
+	}
 	if *asJSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		if err := enc.Encode(rep); err != nil {
+		var v any = reps[0].Report // one file: the report alone, as before
+		if len(reps) > 1 {
+			v = reps
+		}
+		if err := enc.Encode(v); err != nil {
 			return 2, err
 		}
-	} else {
-		rep.Print(w)
 	}
-	if rep.HasProblems() {
-		return 1, nil
-	}
-	return 0, nil
+	return code, nil
 }
 
 // readCrontab reads a file, or stdin for "-", refusing anything over 4 MiB.
@@ -358,6 +380,9 @@ func runImport(args []string, stdin io.Reader, w, log io.Writer) (int, error) {
 	data, err := readCrontab(pos[0], stdin)
 	if err != nil {
 		return 2, err
+	}
+	if audit.IsWorkflow(string(data)) {
+		return 2, fmt.Errorf("%s is a GitHub Actions workflow: its runs happen on GitHub, not on this machine, so cronplain serve cannot monitor them. Check its schedules with cronplain audit", pos[0])
 	}
 	out, found, notes := audit.AddPings(string(data), audit.Options{System: *system, Location: loc}, *base)
 	jobs := make([]monitor.Job, len(found))

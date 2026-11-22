@@ -1,0 +1,14 @@
+# A made-up GitHub Actions workflow for "cronplain audit examples/nightly.yml".
+name: nightly
+on:
+  schedule:
+    - cron: '0 0 * * *'       # nightly build
+    - cron: "*/2 * * * *"     # poll for new releases
+    - cron: */30 9-17 * * 1-5 # business hours: not quoted
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "built at $(date)"
