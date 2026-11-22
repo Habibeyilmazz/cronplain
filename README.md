@@ -6,7 +6,7 @@
 
 cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job failed or did not report in.
 
-![A 16-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; the Monitor tab lists four jobs with their status (one failed with a non-zero exit status) and next expected ping](docs/screenshots/demo.gif)
+![A 19-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; 0 9 32 * * is refused with the day-of-month field marked in red; the Monitor tab lists four jobs, the failed and the late one first, with their next expected ping](docs/screenshots/demo.gif)
 
 <sub>Recorded with Playwright from `cronplain serve` with four made-up jobs.</sub>
 
@@ -104,7 +104,7 @@ Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user
 
 ### Heartbeat monitor
 
-![Monitor tab in dark mode: four jobs, one failed a minute ago, one late, one waiting for its first ping, with the ping command above the table](docs/screenshots/monitor.png)
+![Monitor tab in dark mode: four jobs, the one that failed a minute ago and the late one listed first, then one waiting for its first ping and one on time, with the ping command above the table](docs/screenshots/monitor.png)
 
 <img src="docs/screenshots/monitor-mobile.png" width="260" align="right" alt="The same monitor on a 390px-wide phone: each job is a card with its status, schedule, last success, next expected ping and Copy ping and Delete buttons">
 
@@ -119,6 +119,8 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 3. Exit status 0 counts as a success. Anything from 1 to 255 marks the job **failed** and alerts at once, instead of a day later when the next run is missed. A job that keeps failing alerts only on its first failure.
 4. If no ping arrives by *the first scheduled run after the last ping + grace*, the job is **late** and cronplain alerts once. When DST ends and an hour repeats, a fixed-time job (in crontab syntax: neither the minute nor the hour field starts with `*`, so `30 1-3 * * *` counts) is expected only once, because cron runs it only once.
 5. The next success after a failure or a late alert sends "recovered".
+
+The dashboard lists failed and late jobs first, and while the Monitor tab is open its browser tab title counts them, such as `(2) cronplain`.
 
 | Ping URL | Means |
 |---|---|
