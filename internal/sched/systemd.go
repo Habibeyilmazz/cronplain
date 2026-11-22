@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var systemdDays = map[string]int{
@@ -19,7 +18,7 @@ func (s *Schedule) parseSystemd(text string) error {
 	s.hasSeconds = true
 	toks := strings.Fields(text)
 	if n := len(toks); n > 1 && !strings.ContainsAny(toks[n-1], ":*") {
-		if loc, err := time.LoadLocation(toks[n-1]); err == nil && !strings.EqualFold(toks[n-1], "local") {
+		if loc, err := LoadZone(toks[n-1]); err == nil && !strings.EqualFold(toks[n-1], "local") {
 			s.Location = loc
 			toks = toks[:n-1]
 		}

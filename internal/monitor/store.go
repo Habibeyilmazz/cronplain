@@ -36,7 +36,7 @@ func (j Job) Validate() (*sched.Schedule, *time.Location, error) {
 	if j.Grace < 0 || j.Grace > 7*24*3600 {
 		return nil, nil, fmt.Errorf("grace must be between 0 seconds and 7 days")
 	}
-	loc, err := time.LoadLocation(j.TZ)
+	loc, err := sched.LoadZone(j.TZ)
 	if err != nil || j.TZ == "" || j.TZ == "Local" {
 		return nil, nil, fmt.Errorf("unknown time zone %q (use an IANA name such as Europe/Istanbul or UTC)", j.TZ)
 	}

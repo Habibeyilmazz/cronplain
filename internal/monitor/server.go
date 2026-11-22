@@ -176,7 +176,7 @@ func (s *Server) explain(w http.ResponseWriter, r *http.Request) {
 	if tz == "" {
 		tz = "UTC"
 	}
-	loc, err := time.LoadLocation(tz)
+	loc, err := sched.LoadZone(tz)
 	if err != nil || tz == "Local" {
 		fail(w, http.StatusBadRequest, fmt.Errorf("unknown time zone %q", tz))
 		return

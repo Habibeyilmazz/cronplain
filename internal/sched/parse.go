@@ -170,7 +170,7 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 		if strings.HasPrefix(text, p) {
 			rest := strings.TrimPrefix(text, p)
 			name, after, _ := strings.Cut(rest, " ")
-			loc, err := time.LoadLocation(name)
+			loc, err := LoadZone(name)
 			if err != nil || name == "" || strings.EqualFold(name, "local") {
 				return nil, fmt.Errorf("unknown time zone %q", name)
 			}

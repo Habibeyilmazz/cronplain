@@ -85,7 +85,7 @@ func Run(text string, o Options) *Report {
 			val := strings.Trim(m[2], `"'`)
 			env[m[1]] = val
 			if m[1] == "CRON_TZ" || m[1] == "TZ" {
-				l, err := time.LoadLocation(val)
+				l, err := sched.LoadZone(val)
 				switch {
 				case err != nil:
 					add(n, "error", "unknown time zone %q in %s", val, m[1])

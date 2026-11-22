@@ -85,7 +85,7 @@ func loadZone(name string) (*time.Location, error) {
 	if name == "" || strings.EqualFold(name, "local") {
 		return localZone(), nil
 	}
-	loc, err := time.LoadLocation(name)
+	loc, err := sched.LoadZone(name)
 	if err != nil {
 		return nil, fmt.Errorf("unknown time zone %q (use an IANA name such as Europe/Istanbul)", name)
 	}

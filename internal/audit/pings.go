@@ -5,7 +5,6 @@ import (
 	"path"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/Habibeyilmazz/cronplain/internal/sched"
 )
@@ -62,7 +61,7 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 		}
 		if m := envLine.FindStringSubmatch(line); m != nil {
 			if m[1] == "CRON_TZ" { // TZ= reaches only the commands, cron still schedules in its own zone
-				if l, err := time.LoadLocation(strings.Trim(m[2], `"'`)); err == nil {
+				if l, err := sched.LoadZone(strings.Trim(m[2], `"'`)); err == nil {
 					loc = l
 				}
 			}
