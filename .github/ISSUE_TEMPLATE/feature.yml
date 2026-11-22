@@ -1,0 +1,15 @@
+name: Idea or missing syntax
+description: A schedule syntax cronplain rejects, a lint that would have saved you, or another idea.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: For a syntax, paste an example and link the scheduler's documentation.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help

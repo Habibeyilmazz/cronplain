@@ -2,10 +2,13 @@
 
 ![cronplain: the expression 30 2 * * 0 with each field labelled](assets/hero.png)
 
-Understand, test and monitor scheduled jobs from one small Go binary.
-It explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job did not report in.
+**Know when your scheduled jobs really run, and hear about it when they don't.**
 
-![The explainer in the local web UI: "At 02:30 on Sunday." with the next 20 runs in America/New_York and a note that 02:30 does not exist on 14 March 2027](docs/screenshots/explain.png)
+cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job did not report in.
+
+![A 16-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; the Monitor tab lists four jobs with their status and next expected ping](docs/screenshots/demo.gif)
+
+<sub>Recorded with Playwright from `cronplain serve` with four made-up jobs.</sub>
 
 ## Quickstart
 
@@ -50,6 +53,10 @@ Daylight saving time:
   - Sun 2027-03-14: clocks jump forward 1h at 02:00 EST (now 03:00 EDT). 02:30 does not exist
     that day, so it is not listed. Vixie cron and cronie run such fixed-time jobs right after the jump.
 ```
+
+The same in the web UI (`cronplain serve`, Explain tab):
+
+![The explainer in the local web UI: "At 02:30 on Sunday." with the next 20 runs in America/New_York and a note that 02:30 does not exist on 14 March 2027](docs/screenshots/explain.png)
 
 - **Syntaxes**, detected automatically or forced with `-dialect`:
 
@@ -135,11 +142,32 @@ go test -race ./...
 cd e2e && npm ci && npx playwright install chromium && npm test   # needs Go and Node 22
 ```
 
+## When to use something else
+
+cronplain is a local tool for one person or one machine. Other tools are a better fit for some jobs:
+
+| You want | Use | Why |
+|---|---|---|
+| A quick English reading of one standard 5-field crontab line, nothing to install | [crontab.guru](https://crontab.guru) | It is a web page; cronplain needs a binary but also covers the other syntaxes, time zones, DST and lints. |
+| The final word on a systemd timer | `systemd-analyze calendar --iterations=20 'Mon *-*-* 09:00'` | It is systemd's own parser. cronplain implements a documented subset of `OnCalendar` and rejects what it does not know. |
+| The final word on an AWS schedule | The EventBridge console, which previews the next trigger dates | It is AWS's own evaluator. cronplain follows the AWS docs and says where they are unclear (`L-n`, `LW`). |
+| Cron descriptions inside your own app | A library such as [cronstrue](https://github.com/bradymholt/cRonstrue) (JavaScript) or [cron-descriptor](https://github.com/Salamek/cron-descriptor) (Python) | cronplain is a program, not a library; its Go packages are `internal/`. |
+| Heartbeat monitoring across many machines or a team, with history and many notification channels | [Healthchecks.io](https://healthchecks.io) (open source, hosted or self-hosted) or a hosted service such as Cronitor | `cronplain serve` listens on loopback only, has no login, keeps only the last ping per job, and alerts to the terminal, one webhook and one ntfy topic. |
+
+Use cronplain when you want all of this offline in one binary: check a schedule before you commit it, audit a crontab in CI (`cronplain audit` exits 1 on warnings), and watch a handful of jobs on the machine they run on.
+
 ## Roadmap
+
+Ideas, not promises:
 
 - Optional token so pings can come from other machines through a reverse proxy.
 - A `/ping/<id>/fail` endpoint and a short ping history per job.
-- A static, offline build of the explainer page (today it is served by `cronplain serve`).
+- A static, offline build of the explainer page (today it is served by `cronplain serve`; the schedule math exists only in Go, so this needs a WebAssembly build or a port).
+- Explaining several `cron:` lines of one workflow at once (today a pasted snippet must have exactly one).
+
+## Contributing
+
+Bug reports with the exact expression, time zone and the output you expected are the most useful thing you can send; there is an issue template for it. Code changes: see [CONTRIBUTING.md](CONTRIBUTING.md). Security problems: see [SECURITY.md](SECURITY.md).
 
 ## License
 

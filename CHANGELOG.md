@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (launch round 6)
+- A failed webhook or ntfy alert was lost: it was tried once and only logged. Network errors, HTTP 429 and 5xx are now retried in the background after 30 s, 2 min and 10 min (then "giving up after 4 attempts" is logged); other 4xx answers are final. The first attempt is unchanged and still synchronous. Retries pending when `serve` stops are lost (noted in the code as a shortcut).
+- Pasting a workflow snippet (`on:` / `schedule:` / `- cron: '...'` on separate lines) failed with a systemd error ("two time parts"). `explain`, `/api/explain` and monitor jobs now use its one `cron:` line; several `cron:` lines, or several plain lines, get a clear error. In the web page the schedule fields pick the `cron:` line on paste, because a one-line input drops the newlines (reproduced in Chromium first; the Playwright journey covers it).
+
+### Added (launch round 6)
+- README: one-line pitch, a 16-second GIF recorded with Playwright from the real `serve` (synthetic jobs), a "When to use something else" section (crontab.guru, `systemd-analyze calendar`, the EventBridge console, cronstrue / cron-descriptor, Healthchecks.io and hosted monitors), Contributing section, roadmap marked as ideas.
+- `CONTRIBUTING.md`, `SECURITY.md` (GitHub private vulnerability reporting is not enabled on the repo, so it describes the fallback), issue templates for a wrong explanation, other bugs and ideas.
+
 ### Fixed (reliability round 5; each reproduced first, then a failing test, then the fix)
 - `serve -db 'we?ird.db'` wrote to a file named `we`, `hash#x.db` to `hash`, `pct%20x.db` to `pct x.db`: the path went into the SQLite URI unescaped (a name containing `?mode=ro` could even change how it opened). The path is now escaped. The database, and SQLite's `-wal`/`-shm` files with it, is created mode 0600 instead of following the umask (closes the old umask note).
 - Wrap-around ranges read as two halves: `FRI-MON` was "Friday through Saturday and Sunday through Monday"; now "Friday through Monday". Same for hours (`20-2`), days (`30-2`), months (`NOV-FEB`) and stepped wraps (`22-2/3`).
@@ -64,7 +72,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Notes for the next person
 - Round 5 (reliability) also tried and found fine: empty/whitespace/oversized expressions, full-width digits, NBSP between fields, `-n`/`-tz`/`-check-every` bounds, a directory or non-SQLite file as `-db`, Santiago's midnight DST and Lord Howe's 30-minute DST, years up to 2199, never-firing schedules (each `/api/explain` under 50 ms), audit fuzzing (20 s) and explain fuzzing (30 s).
-- Known and left alone: a failed webhook/ntfy delivery is not retried (the job is already marked alerted; README says so). Pasting several YAML lines (`schedule:` plus `- cron:`) is not understood; one line is. `TZ=A CRON_TZ=B expr` (both prefixes, in that order) gives a confusing error.
+- Known and left alone: `TZ=A CRON_TZ=B expr` (both prefixes, in that order) gives a confusing error. (Round 6 fixed the other two items that were here: alert retries and multi-line YAML pastes.)
+- Round 6 (launch) left as is: the TypeScript explainer (see the note below; the README roadmap lists a static build), and AWS `L-n`/`LW` (cronplain parses them and says to check; no AWS account was used to confirm). Private vulnerability reporting is off; turning it on is a repository setting for the owner.
+- `docs/screenshots/demo.gif` was made by recording Chromium with Playwright (`recordVideo`, 1000x860) against `serve -addr 127.0.0.1:4231` with four jobs added through `/api/jobs`, then `ffmpeg` (10 fps, 760 px wide, 80-colour palette). Re-record it when the page changes visibly.
 - Round 4 (feature) picked AWS support after trying the tool as a newcomer: it was the most common schedule syntax that failed outright. Detection: 6 fields with a Quartz day marker in fields 3 or 5 (1-based) is AWS; in fields 4 or 6 it is Quartz, so the two never collide. AWS is parsed by prepending a `0` seconds field and reusing the Quartz parser (`parseCron`).
 - Round 4 checked the reported gaps: auditing 200 never-firing lines takes 0.8 s (4 ms a line), not worth a cache yet. The SQLite umask note and the missing TypeScript explainer still stand.
 - Security round 3 also checked, and found fine: HTML escaping of every API value in the page, Host-header and cross-origin guards, job id/zone/topic validation (zone names with `..` or `/` prefixes are refused by `time.LoadLocation`), audit and explain output (control characters in a crontab are not echoed raw), git history (no secrets; only the noreply identity), PNG metadata, action SHAs (match their tags), `persist-credentials: false`, least-privilege `permissions`. Worst-case `/api/explain` (`* * * * * *`, n=100) takes about 35 ms.

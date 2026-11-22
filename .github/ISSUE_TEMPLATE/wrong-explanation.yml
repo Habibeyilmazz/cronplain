@@ -1,0 +1,38 @@
+name: Schedule explained wrong
+description: A description, run time, DST note or lint that does not match what the scheduler does.
+labels: [bug]
+body:
+  - type: input
+    id: expr
+    attributes:
+      label: Expression
+      description: Exactly as you pasted it.
+      placeholder: "0 9 1-7 * 1"
+    validations:
+      required: true
+  - type: input
+    id: options
+    attributes:
+      label: Time zone and dialect
+      description: The -tz and -dialect you used (or the web page settings).
+      placeholder: "-tz Europe/Istanbul, dialect auto"
+  - type: textarea
+    id: got
+    attributes:
+      label: What cronplain said
+      description: Output of `cronplain explain -json ...`, or a screenshot.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and where that comes from
+      description: The scheduler's documentation, or when the job actually ran.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: cronplain version
+      description: Output of `cronplain version`.
