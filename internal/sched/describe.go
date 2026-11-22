@@ -156,6 +156,10 @@ func (s *Schedule) timePart() string {
 }
 
 func (s *Schedule) datePart() string {
+	if len(s.dom.items) == 1 && len(s.month.items) == 1 && singles(s.dom) && singles(s.month) && every(s.dow) && s.years == nil &&
+		!s.lastDay && !s.lastWeekday && len(s.nearestWeekday) == 0 {
+		return fmt.Sprintf("on %d %s", s.dom.items[0].lo, monthName(s.month.items[0].lo)) // "on 1 January"
+	}
 	var dom, dw []string
 	if !every(s.dom) && len(s.dom.items) > 0 {
 		if it := s.dom.items[0]; len(s.dom.items) == 1 && it.star {

@@ -393,7 +393,7 @@ func (s *Schedule) parseQuartzDow(t string) error {
 			}
 			s.lastDow = append(s.lastDow, wd)
 		case up == "L":
-			s.lastDow = append(s.lastDow, 6) // Quartz: L alone in day-of-week = Saturday
+			rest = append(rest, "7") // Quartz: L alone in day-of-week means 7, i.e. every Saturday
 		default:
 			rest = append(rest, p)
 		}

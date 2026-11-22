@@ -170,6 +170,8 @@ func TestNext(t *testing.T) {
 			[]string{"2026-11-20T12:00:00Z", "2026-12-18T12:00:00Z"}},
 		{"quartz last Friday", "0 0 12 ? * FRIL", "UTC", "2026-11-01T00:00:00Z",
 			[]string{"2026-11-27T12:00:00Z", "2026-12-25T12:00:00Z"}},
+		{"quartz L alone in day-of-week is Saturday", "0 0 12 ? * L", "UTC", "2026-11-22T00:00:00Z",
+			[]string{"2026-11-28T12:00:00Z", "2026-12-05T12:00:00Z"}},
 		{"quartz last day", "0 0 12 L * ?", "UTC", "2028-02-01T00:00:00Z",
 			[]string{"2028-02-29T12:00:00Z", "2028-03-31T12:00:00Z"}},
 		{"quartz last weekday", "0 0 12 LW * ?", "UTC", "2026-05-01T00:00:00Z",
