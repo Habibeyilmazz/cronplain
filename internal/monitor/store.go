@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"regexp"
 	"time"
 
@@ -52,7 +54,15 @@ type Store struct{ db *sql.DB }
 
 // OpenStore opens (and creates) the database file.
 func OpenStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	// Create it owner-only first; SQLite gives its -wal and -shm files the same mode.
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	f.Close()
+	// Escape the name so ?, # and %xx in it stay part of the file name instead of the URI.
+	uri := "file:" + (&url.URL{Path: path}).EscapedPath() + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -348,6 +349,29 @@ func TestServeRefusesPublicAddress(t *testing.T) {
 		err := Serve(Config{Addr: addr, DB: filepath.Join(t.TempDir(), "x.db"), Every: time.Minute}, io.Discard)
 		if err == nil || !strings.Contains(err.Error(), "loopback") {
 			t.Errorf("Serve(%s) = %v, want loopback error", addr, err)
+		}
+	}
+}
+
+// The -db path is a file name, not a URI: ?, # and %xx must not change where the data goes.
+func TestOpenStoreOddPaths(t *testing.T) {
+	for _, name := range []string{"we?ird.db", "hash#x.db", "pct%20x.db", "with space.db", "mode=ro?x.db"} {
+		path := filepath.Join(t.TempDir(), name)
+		s, err := OpenStore(path)
+		if err != nil {
+			t.Fatalf("OpenStore(%q): %v", name, err)
+		}
+		if _, err := s.Upsert(Job{ID: "a", Schedule: "0 9 * * *", TZ: "UTC"}); err != nil {
+			t.Errorf("%q: Upsert: %v", name, err)
+		}
+		s.Close()
+		fi, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("%q: database not at the given path: %v", name, err)
+			continue
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Errorf("%q: mode %v, want 0600 (owner only)", name, fi.Mode().Perm())
 		}
 	}
 }
