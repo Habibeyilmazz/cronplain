@@ -100,7 +100,8 @@ h2 { font-size: 17px; margin: 0 0 10px; }
 .state::before { content: ""; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .state.up::before { background: var(--up); }
 .state.late { color: var(--late); }
-.state.late::before { background: var(--late); }
+.state.late::before, .state.failed::before { background: var(--late); }
+.state.failed { color: var(--late); }
 .state.new::before { background: transparent; border: 2px solid var(--muted); width: 6px; height: 6px; }
 .jobs .state, .jobs .when { white-space: nowrap; }
 .actions { display: flex; gap: 6px; justify-content: flex-end; }
@@ -198,7 +199,7 @@ form.add input { width: 100%; }
   </section>
 
   <section id="panel-monitor" aria-label="Heartbeat monitor" hidden>
-    <p class="intro">Each job calls <code id="ping-example">curl -fsS http://127.0.0.1:4230/ping/JOB-NAME</code> when it succeeds. If that ping has not arrived by the next scheduled run plus the grace period, cronplain raises an alert on the terminal and on any webhook or ntfy topic you started it with.</p>
+    <p class="intro">End each job's crontab line with <code id="ping-example">; curl -fsS http://127.0.0.1:4230/ping/JOB-NAME/$?</code> to report its exit status: 0 is a success, anything else raises a "failed" alert at once. If no ping has arrived by the next scheduled run plus the grace period, cronplain raises a "late" alert. Alerts go to the terminal and to any webhook or ntfy topic you started it with.</p>
     <div id="jobs"></div>
     <form class="add" id="add">
       <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="nightly-backup"></label>
@@ -228,7 +229,7 @@ function show() {
   }
   if (name === "monitor") loadJobs();
 }
-$("#ping-example").textContent = `curl -fsS ${location.origin}/ping/JOB-NAME`;
+$("#ping-example").textContent = `; curl -fsS ${location.origin}/ping/JOB-NAME/$?`;
 
 // Zones
 try {
@@ -338,7 +339,7 @@ function until(iso) {
   if (s < 172800) return "in " + Math.round(s / 3600) + " h";
   return "in " + Math.round(s / 86400) + " days";
 }
-const stateText = { up: "On time", late: "Late", new: "Waiting", never: "Never runs again" };
+const stateText = { up: "On time", late: "Late", failed: "Failed", new: "Waiting", never: "Never runs again" };
 async function loadJobs() {
   let jobs;
   try {
@@ -355,12 +356,12 @@ async function loadJobs() {
   }
   $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
-      const cmd = `curl -fsS ${location.origin}${j.ping_path}`;
+      const cmd = `curl -fsS ${location.origin}${j.ping_path}/$?`;
       const due = j.due ? new Date(j.due) : null;
       return `<tr>
         <td><span class="state ${esc(j.state)}"${j.state === "new" ? ' title="No ping yet; the first one is expected by the time shown"' : ""}>${esc(stateText[j.state] || j.state)}</span></td>
         <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)}<br>${esc(j.tz)}, ${Math.round(j.grace_seconds / 60)} min grace</div></td>
-        <td data-label="Last ping: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span></td>
+        <td data-label="Last ping: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span>${j.last_fail ? `<div class="desc" title="${esc(j.last_fail)}">failed ${esc(ago(j.last_fail))}</div>` : ""}</td>
         <td data-label="Ping expected by: ">${due ? `<span class="when" title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
         <td><div class="actions"><button class="btn" type="button" data-copy="${esc(cmd)}" title="${esc(cmd)}" aria-label="Copy the ping command for ${esc(j.id)}">Copy ping</button><button class="btn danger" type="button" data-del="${esc(j.id)}" aria-label="Delete ${esc(j.id)}">Delete</button></div></td>
       </tr>`;
@@ -400,7 +401,7 @@ $("#add").addEventListener("submit", async (e) => {
   if (!r.ok) return say(data.error, true);
   say(data.updated
     ? `Updated ${body.id}: new schedule, zone and grace; its last ping is kept.`
-    : `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`);
+    : `Added ${body.id}. End its crontab line with ; curl -fsS ${location.origin}${data.ping_path}/$? to report each run.`);
   e.target.reset();
   document.querySelector('#add [name="tz"]').value = browserZone;
   loadJobs();

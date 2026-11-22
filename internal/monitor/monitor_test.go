@@ -3,6 +3,7 @@ package monitor
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -42,6 +43,9 @@ func TestStatus(t *testing.T) {
 		{"inside grace period", Job{CreatedAt: ts(t, "2026-11-01T00:00:00Z"), LastPing: ptr("2026-11-22T03:00:40Z"), Grace: 300}, "2026-11-23T03:04:00Z", StateUp, "2026-11-23T03:05:00Z"},
 		{"ping arrived after the run", Job{CreatedAt: ts(t, "2026-11-01T00:00:00Z"), LastPing: ptr("2026-11-23T03:02:00Z"), Grace: 300}, "2026-11-23T03:10:00Z", StateUp, "2026-11-24T03:05:00Z"},
 		{"missed a run", Job{CreatedAt: ts(t, "2026-11-01T00:00:00Z"), LastPing: ptr("2026-11-21T03:01:00Z"), Grace: 300}, "2026-11-22T09:00:00Z", StateLate, "2026-11-22T03:05:00Z"},
+		{"failed, next run not due", Job{CreatedAt: ts(t, "2026-11-01T00:00:00Z"), LastPing: ptr("2026-11-21T03:01:00Z"), LastFail: ptr("2026-11-22T03:00:30Z"), Grace: 300}, "2026-11-22T09:00:00Z", StateFail, "2026-11-23T03:05:00Z"},
+		{"failed, never succeeded", Job{CreatedAt: ts(t, "2026-11-22T00:00:00Z"), LastFail: ptr("2026-11-22T03:00:30Z"), Grace: 300}, "2026-11-22T09:00:00Z", StateFail, "2026-11-23T03:05:00Z"},
+		{"failed, then missed the next run", Job{CreatedAt: ts(t, "2026-11-01T00:00:00Z"), LastPing: ptr("2026-11-21T03:01:00Z"), LastFail: ptr("2026-11-22T03:00:30Z"), Grace: 300}, "2026-11-23T03:06:00Z", StateLate, "2026-11-23T03:05:00Z"},
 	}
 	for _, c := range cases {
 		state, due := Status(c.job, daily, time.UTC, ts(t, c.now))
@@ -445,5 +449,120 @@ func TestOpenStoreOddPaths(t *testing.T) {
 		if fi.Mode().Perm() != 0o600 {
 			t.Errorf("%q: mode %v, want 0600 (owner only)", name, fi.Mode().Perm())
 		}
+	}
+}
+
+// A job reports a failure with /ping/ID/fail or its exit status with /ping/ID/$?:
+// alert at once, once per failing streak, and "recovered" on the next success.
+func TestFailurePings(t *testing.T) {
+	h := newHarness(t)
+	if code, body := h.do(t, "POST", "/api/jobs", `{"id":"backup","schedule":"0 3 * * *","tz":"UTC","grace_seconds":300}`, nil); code != 200 {
+		t.Fatalf("add: %d %s", code, body)
+	}
+	state := func() jobView {
+		t.Helper()
+		var jobs []jobView
+		_, body := h.do(t, "GET", "/api/jobs", "", nil)
+		if err := json.Unmarshal([]byte(body), &jobs); err != nil || len(jobs) != 1 {
+			t.Fatalf("jobs: %s", body)
+		}
+		return jobs[0]
+	}
+	if code, _ := h.do(t, "GET", "/ping/backup/0", "", nil); code != 200 || state().State != StateUp {
+		t.Fatalf("exit 0 is a success ping: %d %s", code, state().State)
+	}
+
+	h.clock.set(ts(t, "2026-11-23T03:00:20Z"))
+	if code, body := h.do(t, "GET", "/ping/backup/3", "", nil); code != 200 || body != "OK\n" {
+		t.Fatalf("exit 3: %d %q", code, body)
+	}
+	a := wait(t, h.alerts)
+	if a.State != "failed" || a.ExitStatus == nil || *a.ExitStatus != 3 || a.Message != `job "backup" failed with exit status 3` {
+		t.Errorf("alert = %+v", a)
+	}
+	if n := wait(t, h.ntfy); n != "/jobs | cronplain: backup failed | "+a.Message {
+		t.Errorf("ntfy = %q", n)
+	}
+	v := state()
+	if v.State != StateFail || v.LastFail == nil || !v.LastFail.Equal(ts(t, "2026-11-23T03:00:20Z")) || v.LastPing == nil || !v.Due.Equal(ts(t, "2026-11-24T03:05:00Z")) {
+		t.Errorf("after failure: %+v", v)
+	}
+
+	// Failing again is not news: no second alert.
+	h.clock.set(ts(t, "2026-11-24T03:00:20Z"))
+	h.do(t, "POST", "/ping/backup/fail", "", nil)
+	h.s.Check()
+	select {
+	case a := <-h.alerts:
+		t.Errorf("second failure alerted again: %+v", a)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Late after failing: the late alert fires, and a failure after that is news again.
+	h.clock.set(ts(t, "2026-11-25T03:06:00Z"))
+	h.s.Check()
+	if a = wait(t, h.alerts); a.State != "late" {
+		t.Errorf("alert = %+v", a)
+	}
+	wait(t, h.ntfy)
+	h.do(t, "GET", "/ping/backup/fail", "", nil)
+	if a = wait(t, h.alerts); a.State != "failed" || a.ExitStatus != nil || a.Message != `job "backup" reported a failure` {
+		t.Errorf("alert = %+v", a)
+	}
+	wait(t, h.ntfy)
+
+	// Success clears the failure and says so.
+	h.do(t, "HEAD", "/ping/backup", "", nil)
+	if a = wait(t, h.alerts); a.State != "recovered" {
+		t.Errorf("alert = %+v", a)
+	}
+	wait(t, h.ntfy)
+	if v = state(); v.State != StateUp || v.LastFail != nil {
+		t.Errorf("after success: %+v", v)
+	}
+
+	for _, p := range []string{"/ping/backup/256", "/ping/backup/-1", "/ping/backup/ok", "/ping/backup/1/x", "/ping/backup/0001"} {
+		if code, _ := h.do(t, "GET", p, "", nil); code != 404 {
+			t.Errorf("%s: %d, want 404", p, code)
+		}
+	}
+	if code, _ := h.do(t, "GET", "/ping/nope/1", "", nil); code != 404 {
+		t.Errorf("unknown job failure: %d, want 404", code)
+	}
+	if code, _ := h.do(t, "GET", "/ping/backup/1", "", map[string]string{"Sec-Fetch-Site": "cross-site"}); code != 403 {
+		t.Errorf("cross-site failure ping: %d, want 403", code)
+	}
+}
+
+// A database made before failure pings existed gains the column and keeps its jobs.
+func TestOpenStoreAddsLastFail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE jobs (id TEXT PRIMARY KEY, schedule TEXT NOT NULL, tz TEXT NOT NULL, grace INTEGER NOT NULL,
+		created_at INTEGER NOT NULL, last_ping INTEGER, alerted_due INTEGER);
+		INSERT INTO jobs VALUES ('old', '0 9 * * *', 'UTC', 60, 1700000000, 1700003600, NULL)`)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 2 { // opening twice must not try to add the column again
+		s, err := OpenStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		news, err := s.Fail("old", time.Unix(1700007200, 0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if news != (i == 0) {
+			t.Errorf("open %d: news = %v; only the first failure is news", i+1, news)
+		}
+		if jobs, _ := s.List(); len(jobs) != 1 || jobs[0].LastPing == nil || jobs[0].LastFail == nil {
+			t.Errorf("jobs = %+v", jobs)
+		}
+		s.Close()
 	}
 }

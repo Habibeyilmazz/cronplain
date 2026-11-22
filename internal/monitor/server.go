@@ -125,6 +125,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	mux.HandleFunc("POST /api/jobs", s.saveJob)
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.deleteJob)
 	mux.HandleFunc("/ping/{id}", s.ping)
+	mux.HandleFunc("/ping/{id}/{result}", s.ping)
 
 	csrf := http.NewCrossOriginProtection() // rejects cross-site POST/DELETE from browsers
 	h := csrf.Handler(mux)
@@ -256,9 +257,27 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "pings from web pages are not accepted", http.StatusForbidden)
 		return
 	}
-	id := r.PathValue("id")
+	// "/ping/ID/$?" in a crontab reports the job's exit status: 0 is success.
+	id, result := r.PathValue("id"), r.PathValue("result")
+	exit := 0
+	if result == "fail" {
+		exit = -1
+	} else if result != "" {
+		n, err := strconv.Atoi(result)
+		if err != nil || n < 0 || n > 255 || len(result) > 3 {
+			http.Error(w, "use /ping/ID on success, or /ping/ID/fail or /ping/ID/EXIT-STATUS (0-255)", http.StatusNotFound)
+			return
+		}
+		exit = n
+	}
 	s.mu.Lock()
-	wasLate, err := s.store.Ping(id, s.now())
+	var changed bool
+	var err error
+	if exit == 0 {
+		changed, err = s.store.Ping(id, s.now())
+	} else {
+		changed, err = s.store.Fail(id, s.now())
+	}
 	s.mu.Unlock()
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -269,8 +288,13 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(s.out, "ping %s: %v\n", id, err)
 		return
 	}
-	if wasLate {
-		go s.alert.Send(Alert{Job: id, State: "recovered", Message: fmt.Sprintf("job %q pinged again and is back on schedule", id)})
+	switch {
+	case changed && exit == 0:
+		go s.alert.Send(Alert{Job: id, State: "recovered", Message: fmt.Sprintf("job %q succeeded again and is back on schedule", id)})
+	case changed && exit > 0:
+		go s.alert.Send(Alert{Job: id, State: "failed", ExitStatus: &exit, Message: fmt.Sprintf("job %q failed with exit status %d", id, exit)})
+	case changed:
+		go s.alert.Send(Alert{Job: id, State: "failed", Message: fmt.Sprintf("job %q reported a failure", id)})
 	}
 	io.WriteString(w, "OK\n")
 }

@@ -1,5 +1,6 @@
 // End-to-end test of the main user journey: explain a schedule in the browser,
-// then add a monitored job, ping it like a cron job would, and delete it.
+// then add a monitored job, ping it like a cron job would (a failure, then a
+// success), and delete it.
 // Builds the real binary and runs "cronplain serve" on 127.0.0.1:4234.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -70,7 +71,7 @@ test("explain: pasting a workflow snippet keeps its cron: line", async () => {
   assert.equal(await text("#sentence"), "At 06:17 on Monday (UTC time).");
 });
 
-test("monitor: add a job, ping it, see it on time, delete it", async () => {
+test("monitor: add a job, report a failure, then a success, delete it", async () => {
   await page.click('nav a[href="#monitor"]');
   await page.waitForSelector("#jobs .empty");
   assert.match(await text("#jobs"), /No jobs yet/);
@@ -79,17 +80,25 @@ test("monitor: add a job, ping it, see it on time, delete it", async () => {
   await page.fill('#add [name="schedule"]', "0 3 * * *");
   await page.click('#add button[type="submit"]');
   await page.waitForSelector("#jobs table");
-  assert.match(await text("#msg"), /^Added nightly-backup\. Ping http:\/\/127\.0\.0\.1:\d+\/ping\/nightly-backup/);
+  assert.match(await text("#msg"), /^Added nightly-backup\. End its crontab line with ; curl -fsS http:\/\/127\.0\.0\.1:\d+\/ping\/nightly-backup\/\$\? /);
   assert.equal(await text("#jobs tbody .state"), "Waiting");
+  await page.click('button[data-copy]');
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^curl -fsS http:\/\/127\.0\.0\.1:\d+\/ping\/nightly-backup\/\$\?$/);
 
-  // What the cron job does on success (curl -fsS .../ping/ID).
-  const ping = await fetch(`${base}/ping/nightly-backup`);
-  assert.equal(ping.status, 200);
-  assert.equal((await fetch(`${base}/ping/no-such-job`)).status, 404);
+  // What "; curl -fsS .../ping/ID/$?" sends after a run that exited with status 2.
+  assert.equal((await fetch(`${base}/ping/nightly-backup/2`)).status, 200);
+  assert.equal((await fetch(`${base}/ping/no-such-job/2`)).status, 404);
+  await page.reload();
+  await page.waitForSelector("#jobs table");
+  assert.equal(await text("#jobs tbody .state"), "Failed");
+  assert.match(await text("#jobs tbody"), /failed \d+s ago/);
 
+  // The next run succeeds.
+  assert.equal((await fetch(`${base}/ping/nightly-backup/0`)).status, 200);
   await page.reload();
   await page.waitForSelector("#jobs table");
   assert.equal(await text("#jobs tbody .state"), "On time");
+  assert.doesNotMatch(await text("#jobs tbody"), /failed/);
 
   page.once("dialog", (d) => d.accept());
   await page.click('button[data-del="nightly-backup"]');

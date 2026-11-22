@@ -22,7 +22,8 @@ type Job struct {
 	Grace      int        `json:"grace_seconds"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastPing   *time.Time `json:"last_ping"`
-	AlertedDue *time.Time `json:"-"` // due time we already alerted about
+	LastFail   *time.Time `json:"last_fail"` // a failure reported after the last success ping, or nil
+	AlertedDue *time.Time `json:"-"`         // due time we already alerted about
 }
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
@@ -74,8 +75,15 @@ func OpenStore(path string) (*Store, error) {
 		grace INTEGER NOT NULL,
 		created_at INTEGER NOT NULL,
 		last_ping INTEGER,
-		alerted_due INTEGER
+		alerted_due INTEGER,
+		last_fail INTEGER
 	)`)
+	if err == nil { // databases made before failure pings lack the column
+		var has bool
+		if err = db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info('jobs') WHERE name = 'last_fail'`).Scan(&has); err == nil && !has {
+			_, err = db.Exec(`ALTER TABLE jobs ADD COLUMN last_fail INTEGER`)
+		}
+	}
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("open %s: %w", path, err)
@@ -110,7 +118,7 @@ func (s *Store) Delete(id string) (bool, error) {
 
 // List returns all jobs ordered by id.
 func (s *Store) List() ([]Job, error) {
-	rows, err := s.db.Query(`SELECT id, schedule, tz, grace, created_at, last_ping, alerted_due FROM jobs ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id, schedule, tz, grace, created_at, last_ping, alerted_due, last_fail FROM jobs ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +127,8 @@ func (s *Store) List() ([]Job, error) {
 	for rows.Next() {
 		var j Job
 		var created int64
-		var ping, alerted sql.NullInt64
-		if err := rows.Scan(&j.ID, &j.Schedule, &j.TZ, &j.Grace, &created, &ping, &alerted); err != nil {
+		var ping, alerted, failed sql.NullInt64
+		if err := rows.Scan(&j.ID, &j.Schedule, &j.TZ, &j.Grace, &created, &ping, &alerted, &failed); err != nil {
 			return nil, err
 		}
 		j.CreatedAt = time.Unix(created, 0)
@@ -132,6 +140,10 @@ func (s *Store) List() ([]Job, error) {
 			t := time.Unix(alerted.Int64, 0)
 			j.AlertedDue = &t
 		}
+		if failed.Valid {
+			t := time.Unix(failed.Int64, 0)
+			j.LastFail = &t
+		}
 		jobs = append(jobs, j)
 	}
 	return jobs, rows.Err()
@@ -140,25 +152,39 @@ func (s *Store) List() ([]Job, error) {
 // ErrNotFound means no job has that id.
 var ErrNotFound = errors.New("no such job")
 
-// Ping records a heartbeat and clears any alert; it returns whether the job had been alerted as late.
-func (s *Store) Ping(id string, at time.Time) (wasLate bool, err error) {
+// Ping records a success heartbeat and clears any alert or failure; it returns
+// whether the job had been alerted as late or had reported a failure.
+func (s *Store) Ping(id string, at time.Time) (wasDown bool, err error) {
+	return s.record(id, `UPDATE jobs SET last_ping = ?, last_fail = NULL, alerted_due = NULL WHERE id = ?`, at,
+		func(alerted, failed bool) bool { return alerted || failed })
+}
+
+// Fail records a reported failure (the job ran but did not succeed) and clears a
+// late alert, since the job did run. It returns whether this is news: the job
+// was not already failing, or it had been alerted as late since.
+func (s *Store) Fail(id string, at time.Time) (news bool, err error) {
+	return s.record(id, `UPDATE jobs SET last_fail = ?, alerted_due = NULL WHERE id = ?`, at,
+		func(alerted, failed bool) bool { return alerted || !failed })
+}
+
+func (s *Store) record(id, update string, at time.Time, result func(alerted, failed bool) bool) (bool, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	var alerted sql.NullInt64
-	err = tx.QueryRow(`SELECT alerted_due FROM jobs WHERE id = ?`, id).Scan(&alerted)
+	var alerted, failed sql.NullInt64
+	err = tx.QueryRow(`SELECT alerted_due, last_fail FROM jobs WHERE id = ?`, id).Scan(&alerted, &failed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, ErrNotFound
 	}
 	if err != nil {
 		return false, err
 	}
-	if _, err = tx.Exec(`UPDATE jobs SET last_ping = ?, alerted_due = NULL WHERE id = ?`, at.Unix(), id); err != nil {
+	if _, err = tx.Exec(update, at.Unix(), id); err != nil {
 		return false, err
 	}
-	return alerted.Valid, tx.Commit()
+	return result(alerted.Valid, failed.Valid), tx.Commit()
 }
 
 // MarkAlerted remembers that the job was reported late for this due time.
@@ -171,18 +197,22 @@ func (s *Store) MarkAlerted(id string, due time.Time) error {
 type State string
 
 const (
-	StateNew   State = "new"   // never pinged, first run not due yet
-	StateUp    State = "up"    // pinged and the next ping is not due yet
-	StateLate  State = "late"  // the expected ping is overdue
-	StateNever State = "never" // the schedule never fires again
+	StateNew   State = "new"    // never pinged, first run not due yet
+	StateUp    State = "up"     // pinged and the next ping is not due yet
+	StateLate  State = "late"   // the expected ping is overdue
+	StateFail  State = "failed" // the last run reported a failure; the next run is not overdue yet
+	StateNever State = "never"  // the schedule never fires again
 )
 
 // Status works out the job's state and the time its next ping is due by:
-// the first scheduled run after the last ping (or creation) plus the grace period.
+// the first scheduled run after the last ping or failure (or creation) plus the grace period.
 func Status(j Job, s *sched.Schedule, loc *time.Location, now time.Time) (State, time.Time) {
 	base := j.CreatedAt
 	if j.LastPing != nil {
 		base = *j.LastPing
+	}
+	if j.LastFail != nil && j.LastFail.After(base) {
+		base = *j.LastFail
 	}
 	runs := s.Next(base, loc, 1)
 	if len(runs) == 0 {
@@ -203,6 +233,8 @@ func Status(j Job, s *sched.Schedule, loc *time.Location, now time.Time) (State,
 	switch {
 	case now.After(due):
 		return StateLate, due
+	case j.LastFail != nil:
+		return StateFail, due
 	case j.LastPing == nil:
 		return StateNew, due
 	}

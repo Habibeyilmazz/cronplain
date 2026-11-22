@@ -15,12 +15,13 @@ import (
 
 // Alert is sent when a job goes late or recovers.
 type Alert struct {
-	Job      string     `json:"job"`
-	State    string     `json:"state"` // "late" or "recovered"
-	Schedule string     `json:"schedule"`
-	Due      time.Time  `json:"due,omitzero"` // unset on "recovered"
-	LastPing *time.Time `json:"last_ping"`
-	Message  string     `json:"message"`
+	Job        string     `json:"job"`
+	State      string     `json:"state"` // "late", "failed" or "recovered"
+	Schedule   string     `json:"schedule"`
+	Due        time.Time  `json:"due,omitzero"` // set on "late" only
+	LastPing   *time.Time `json:"last_ping"`
+	ExitStatus *int       `json:"exit_status,omitempty"` // on "failed" from /ping/ID/N
+	Message    string     `json:"message"`
 }
 
 // Alerter delivers alerts to stdout and the optional webhook and ntfy topic.
@@ -75,8 +76,11 @@ func (a *Alerter) Send(al Alert) {
 	}
 	if a.Ntfy != "" {
 		title, tags := "cronplain: "+al.Job+" is late", "warning"
-		if al.State == "recovered" {
+		switch al.State {
+		case "recovered":
 			title, tags = "cronplain: "+al.Job+" recovered", "white_check_mark"
+		case "failed":
+			title, tags = "cronplain: "+al.Job+" failed", "x"
 		}
 		a.post(a.Ntfy, "text/plain", []byte(al.Message), map[string]string{"Title": title, "Tags": tags})
 	}
