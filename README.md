@@ -102,13 +102,13 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 1. Open `http://127.0.0.1:4230`, switch to **Monitor** and add a job: a name, its schedule (any syntax above), its time zone and a grace period.
 2. Make the job report success, for example in a crontab:
    `0 3 * * * /opt/bin/backup && curl -fsS http://127.0.0.1:4230/ping/nightly-backup`
-3. If no ping arrives by *the first scheduled run after the last ping + grace*, cronplain alerts once, and again with "recovered" when the next ping arrives.
+3. If no ping arrives by *the first scheduled run after the last ping + grace*, cronplain alerts once, and again with "recovered" when the next ping arrives. When DST ends and an hour repeats, a fixed-time job is expected only once, because cron runs it only once.
 
 Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state`, `schedule`, `due`, `last_ping`, `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
 Jobs and ping times live in one SQLite file (`-db`). Pings accept `GET`, `POST` or `HEAD`.
 Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
 
-The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding) and cross-site `POST`/`DELETE` from browsers.
+The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat).
 
 ## How it works
 
