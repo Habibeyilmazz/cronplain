@@ -35,17 +35,19 @@ a { color: var(--accent); }
 .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
 
 header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0 12px; flex-wrap: wrap; }
-.mark { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
+.mark { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -0.01em; margin: 0; }
 .mark svg { width: 26px; height: 26px; }
 nav { display: flex; gap: 4px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; padding: 4px; }
-nav button { font: inherit; font-size: 15px; border: 0; background: none; color: var(--muted); padding: 6px 16px; border-radius: 999px; cursor: pointer; }
-nav button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+nav a { font-size: 15px; color: var(--muted); padding: 6px 16px; border-radius: 999px; text-decoration: none; }
+nav a:hover { color: var(--ink); }
+nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
 
 /* The expression is the one loud thing on the page. */
 .expr-box { margin-top: 28px; }
 .expr-box label { display: block; color: var(--muted); font-size: 15px; margin-bottom: 6px; }
 #expr { width: 100%; font: 600 clamp(24px, 5vw, 40px)/1.2 var(--mono); color: var(--ink); background: var(--sheet);
   border: 2px solid var(--ink); border-radius: 10px; padding: 14px 16px; letter-spacing: 0.02em; }
+#expr[aria-invalid="true"] { border-color: var(--late); }
 .fields { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 2px 0; min-height: 44px; }
 .fields div { display: flex; flex-direction: column; }
 .fields code { font: 600 18px/1.3 var(--mono); border-bottom: 3px solid var(--accent); padding-bottom: 2px; align-self: flex-start; }
@@ -56,14 +58,19 @@ input, select { font: inherit; color: var(--ink); background: var(--sheet); bord
 #tz { width: 220px; }
 #n { width: 80px; }
 .examples { font-size: 14px; color: var(--muted); margin-top: 14px; }
-.examples button { font: 13px var(--mono); color: var(--accent); background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; margin: 3px 2px; cursor: pointer; }
+.examples button { font: 13px var(--mono); color: var(--accent); background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; margin: 3px 2px; cursor: pointer; }
+.examples button:hover { border-color: var(--accent); }
 
 #sentence { font-size: clamp(22px, 3.2vw, 30px); line-height: 1.3; font-weight: 600; letter-spacing: -0.01em; margin: 30px 0 6px; max-width: 30em; }
 #meta { color: var(--muted); font-size: 15px; margin: 0 0 24px; }
 .error { color: var(--late); font-weight: 600; }
+.hint { color: var(--muted); font-weight: 400; }
 
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; padding-bottom: 48px; }
-@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } .cols .notes { order: -1; } }
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; } .cols .notes { order: -1; }
+  .controls label:first-child { flex: 1 1 100%; } #tz { width: 100%; }
+}
 h2 { font-size: 17px; margin: 0 0 10px; }
 .timetable { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
 .timetable table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -79,6 +86,7 @@ h2 { font-size: 17px; margin: 0 0 10px; }
 .notes li.warn { border-left-color: var(--late); }
 .notes li.dst { border-left-color: var(--ochre); background: var(--ochre-bg); }
 .notes .none { color: var(--muted); font-size: 15px; }
+.notes ul:last-child { margin-bottom: 0; }
 
 /* Monitor */
 .intro { color: var(--muted); max-width: 46em; margin: 28px 0 20px; }
@@ -94,46 +102,52 @@ h2 { font-size: 17px; margin: 0 0 10px; }
 .state.late { color: var(--late); }
 .state.late::before { background: var(--late); }
 .state.new::before { background: transparent; border: 2px solid var(--muted); width: 6px; height: 6px; }
-.curl { display: flex; gap: 6px; align-items: center; }
-.curl code { background: var(--paper); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
-.btn { font: inherit; font-size: 14px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.jobs .state, .jobs .when { white-space: nowrap; }
+.actions { display: flex; gap: 6px; justify-content: flex-end; }
+.intro code { font: 14px var(--mono); color: var(--ink); background: var(--sheet); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.btn { font: inherit; font-size: 14px; white-space: nowrap; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
 .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); padding: 8px 16px; }
 .btn.danger { color: var(--late); }
+.btn:hover { border-color: var(--muted); }
 .empty { background: var(--sheet); border: 1px dashed var(--rule); border-radius: 10px; padding: 24px; color: var(--muted); }
 form.add { display: grid; grid-template-columns: 1fr 1.4fr 1fr 0.6fr auto; gap: 12px; align-items: end; margin: 28px 0 8px; }
 form.add label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); gap: 4px; }
 form.add input { width: 100%; }
-#add-msg { min-height: 1.5em; font-size: 15px; padding-bottom: 48px; }
+#msg { min-height: 1.5em; font-size: 15px; padding-bottom: 48px; }
 @media (max-width: 760px) {
   form.add { grid-template-columns: 1fr 1fr; }
+  form.add .btn { grid-column: 1 / -1; padding: 10px 16px; }
+  .actions { justify-content: flex-start; padding-top: 4px; }
   .jobs thead { display: none; }
   .jobs, .jobs tbody, .jobs tr, .jobs td { display: block; width: 100%; }
   .jobs tr { border-bottom: 1px solid var(--rule); }
   .jobs td { border: 0; padding: 6px 14px; }
+  .jobs td:first-child { padding-top: 14px; }
+  .jobs td:last-child { padding-bottom: 14px; }
   .jobs td[data-label]::before { content: attr(data-label); color: var(--muted); }
   .jobs td[data-label] .desc { display: inline; margin-left: 6px; }
 }
 [hidden] { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (prefers-reduced-motion: no-preference) { #sentence { transition: opacity .15s; } }
+@media (prefers-reduced-motion: no-preference) { #sentence, .cols { transition: opacity .15s; } }
 .stale { opacity: .45; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="mark">
+    <h1 class="mark">
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 8v8l5 4" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>
       cronplain
-    </div>
-    <nav role="tablist" aria-label="Sections">
-      <button role="tab" id="tab-explain" aria-controls="explain" aria-selected="true">Explain</button>
-      <button role="tab" id="tab-monitor" aria-controls="monitor" aria-selected="false">Monitor</button>
+    </h1>
+    <nav aria-label="Sections">
+      <a href="#explain" aria-current="page">Explain</a>
+      <a href="#monitor">Monitor</a>
     </nav>
   </header>
 
   <main>
-  <section id="explain" role="tabpanel" aria-labelledby="tab-explain">
+  <section id="panel-explain" aria-label="Explain a schedule">
     <div class="expr-box">
       <label for="expr">Schedule: crontab, Quartz, systemd OnCalendar or a GitHub Actions <code>cron:</code> line</label>
       <input id="expr" value="30 2 * * 1-5" autocomplete="off" spellcheck="false">
@@ -167,7 +181,7 @@ form.add input { width: 100%; }
       <p id="sentence"></p>
       <p id="meta"></p>
     </div>
-    <div class="cols">
+    <div class="cols" id="results">
       <div>
         <h2 id="runs-title">Next runs</h2>
         <div class="timetable"><table><tbody id="runs"></tbody></table></div>
@@ -181,8 +195,8 @@ form.add input { width: 100%; }
     </div>
   </section>
 
-  <section id="monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
-    <p class="intro">Each job calls its ping URL when it succeeds. If a ping has not arrived by the next scheduled run plus the grace period, cronplain raises an alert on the terminal and on any webhook or ntfy topic you started it with.</p>
+  <section id="panel-monitor" aria-label="Heartbeat monitor" hidden>
+    <p class="intro">Each job calls <code id="ping-example">curl -fsS http://127.0.0.1:4230/ping/JOB-NAME</code> when it succeeds. If that ping has not arrived by the next scheduled run plus the grace period, cronplain raises an alert on the terminal and on any webhook or ntfy topic you started it with.</p>
     <div id="jobs"></div>
     <form class="add" id="add">
       <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="nightly-backup"></label>
@@ -191,7 +205,7 @@ form.add input { width: 100%; }
       <label>Grace (min) <input name="grace" type="number" min="0" max="10080" value="5" required></label>
       <button class="btn primary" type="submit">Add job</button>
     </form>
-    <p id="add-msg" role="status"></p>
+    <p id="msg" role="status"></p>
   </section>
   </main>
 </div>
@@ -199,19 +213,20 @@ form.add input { width: 100%; }
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const unreachable = "cronplain is not reachable. Is cronplain serve still running?";
 const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-// Tabs
-const tabs = { explain: $("#tab-explain"), monitor: $("#tab-monitor") };
-function show(name) {
-  for (const [k, b] of Object.entries(tabs)) {
-    b.setAttribute("aria-selected", String(k === name));
-    $("#" + k).hidden = k !== name;
+// Sections: the hash picks one; panel ids differ from the hashes so the browser does not scroll.
+function show() {
+  const name = location.hash === "#monitor" ? "monitor" : "explain";
+  for (const k of ["explain", "monitor"]) {
+    $("#panel-" + k).hidden = k !== name;
+    const a = $(`nav a[href="#${k}"]`);
+    if (k === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   if (name === "monitor") loadJobs();
 }
-tabs.explain.onclick = () => { history.replaceState(null, "", "#explain"); show("explain"); };
-tabs.monitor.onclick = () => { history.replaceState(null, "", "#monitor"); show("monitor"); };
+$("#ping-example").textContent = `curl -fsS ${location.origin}/ping/JOB-NAME`;
 
 // Zones
 try {
@@ -241,26 +256,24 @@ function drawFields(expr, dialect) {
 let timer, seq = 0;
 async function explain() {
   const expr = $("#expr").value.trim();
-  if (!expr) return;
   const my = ++seq;
+  if (!expr) return clear(`<span class="hint">Type a schedule above, or pick one of the examples.</span>`);
   const q = new URLSearchParams({ expr, tz: $("#tz").value.trim() || "UTC", dialect: $("#dialect").value, n: $("#n").value || "20" });
   $("#sentence").classList.add("stale");
+  $("#results").classList.add("stale");
   let data;
   try {
     const r = await fetch("/api/explain?" + q);
     data = await r.json();
   } catch (e) {
-    data = { error: "cronplain is not reachable. Is cronplain serve still running?" };
+    data = { error: unreachable, offline: true };
   }
   if (my !== seq) return;
+  if (data.error) return clear(`<span class="error">${esc(data.error)}</span>`, !data.offline);
+  $("#expr").removeAttribute("aria-invalid");
   $("#sentence").classList.remove("stale");
-  if (data.error) {
-    $("#sentence").innerHTML = `<span class="error">${esc(data.error)}</span>`;
-    $("#meta").textContent = "";
-    $("#fields").innerHTML = "";
-    for (const id of ["#runs", "#dst", "#lints"]) $(id).innerHTML = "";
-    return;
-  }
+  $("#results").classList.remove("stale");
+  $("#results").hidden = false;
   drawFields(data.expr, data.dialect);
   $("#sentence").textContent = data.description;
   const names = { cron: "crontab", "cron-seconds": "cron with seconds", quartz: "Quartz", "github-actions": "GitHub Actions", systemd: "systemd OnCalendar" };
@@ -272,10 +285,20 @@ async function explain() {
     const changed = prev !== null && prev !== r.offset;
     prev = r.offset;
     const cls = [changed ? "zone-change" : "", r.repeated ? "repeated" : ""].join(" ").trim();
-    return `<tr class="${cls}"${changed ? ' title="UTC offset changed before this run"' : ""}><td class="day">${esc(day)}</td><td>${esc(date)}</td><td class="time">${esc(time)}</td><td class="zone">${esc(r.abbrev)} ${esc(r.offset)}</td></tr>`;
+    const zone = /^[+-]/.test(r.abbrev) ? r.offset : `${r.abbrev} ${r.offset}`; // Istanbul's "+03" is not a name
+    return `<tr class="${cls}"${changed ? ' title="UTC offset changed before this run"' : ""}><td class="day">${esc(day)}</td><td>${esc(date)}</td><td class="time">${esc(time)}</td><td class="zone">${changed ? '<span class="sr">offset changes: </span>' : ""}${esc(zone)}</td></tr>`;
   }).join("") : `<tr><td class="none">No upcoming runs.</td></tr>`;
   $("#dst").innerHTML = data.dst.length ? data.dst.map((t) => `<li class="dst">${esc(t)}</li>`).join("") : `<li class="none">No clock changes before the last listed run.</li>`;
   $("#lints").innerHTML = data.lints.length ? data.lints.map((l) => `<li class="${esc(l.level)}">${esc(l.message)}</li>`).join("") : `<li class="none">Nothing surprising about this schedule.</li>`;
+}
+// clear replaces the results with one message (empty input or an error).
+function clear(html, invalid) {
+  $("#sentence").innerHTML = html;
+  $("#sentence").classList.remove("stale");
+  $("#meta").textContent = "";
+  $("#fields").innerHTML = "";
+  $("#results").hidden = true;
+  if (invalid) $("#expr").setAttribute("aria-invalid", "true"); else $("#expr").removeAttribute("aria-invalid");
 }
 function soon() { clearTimeout(timer); timer = setTimeout(explain, 200); }
 for (const id of ["#expr", "#tz", "#n"]) $(id).addEventListener("input", soon);
@@ -303,33 +326,50 @@ function until(iso) {
 const stateText = { up: "On time", late: "Late", new: "Waiting", never: "Never runs again" };
 async function loadJobs() {
   let jobs;
-  try { jobs = await (await fetch("/api/jobs")).json(); } catch (e) { return; }
-  if (!jobs.length) {
-    $("#jobs").innerHTML = `<div class="empty">No jobs yet. Add one below, then end the job's crontab line with <code>&amp;&amp; curl -fsS ${esc(location.origin)}/ping/NAME</code>.</div>`;
+  try {
+    const r = await fetch("/api/jobs");
+    if (!r.ok) throw new Error();
+    jobs = await r.json();
+  } catch (e) {
+    $("#jobs").innerHTML = `<div class="empty error" role="alert">${esc(unreachable)}</div>`;
     return;
   }
-  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th>Ping URL</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
+  if (!jobs.length) {
+    $("#jobs").innerHTML = `<div class="empty">No jobs yet. Add the first one below.</div>`;
+    return;
+  }
+  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
       const cmd = `curl -fsS ${location.origin}${j.ping_path}`;
       const due = j.due ? new Date(j.due) : null;
       return `<tr>
         <td><span class="state ${esc(j.state)}"${j.state === "new" ? ' title="No ping yet; the first one is expected by the time shown"' : ""}>${esc(stateText[j.state] || j.state)}</span></td>
         <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)}<br>${esc(j.tz)}, ${Math.round(j.grace_seconds / 60)} min grace</div></td>
-        <td data-label="Last ping: " title="${esc(j.last_ping || "")}">${esc(ago(j.last_ping))}</td>
-        <td data-label="Ping expected by: ">${due ? `<span title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
-        <td><div class="curl"><code title="${esc(cmd)}">${esc(j.ping_path)}</code><button class="btn" type="button" data-copy="${esc(cmd)}" aria-label="Copy the curl command for ${esc(j.id)}">Copy curl</button></div></td>
-        <td><button class="btn danger" type="button" data-del="${esc(j.id)}">Delete</button></td>
+        <td data-label="Last ping: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span></td>
+        <td data-label="Ping expected by: ">${due ? `<span class="when" title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
+        <td><div class="actions"><button class="btn" type="button" data-copy="${esc(cmd)}" title="${esc(cmd)}" aria-label="Copy the ping command for ${esc(j.id)}">Copy ping</button><button class="btn danger" type="button" data-del="${esc(j.id)}" aria-label="Delete ${esc(j.id)}">Delete</button></div></td>
       </tr>`;
     }).join("") + `</tbody></table>`;
 }
 $("#jobs").addEventListener("click", async (e) => {
   const c = e.target.closest("[data-copy]"), d = e.target.closest("[data-del]");
   if (c) {
-    try { await navigator.clipboard.writeText(c.dataset.copy); c.textContent = "Copied"; } catch (err) { c.textContent = "Select and copy"; }
-    setTimeout(() => (c.textContent = "Copy curl"), 1500);
+    try {
+      await navigator.clipboard.writeText(c.dataset.copy);
+      c.textContent = "Copied";
+      setTimeout(() => (c.textContent = "Copy ping"), 1500);
+    } catch (err) {
+      prompt("Copy this command:", c.dataset.copy);
+    }
   }
-  if (d && confirm(`Delete job "${d.dataset.del}"? Its ping history is lost.`)) {
-    await fetch("/api/jobs/" + encodeURIComponent(d.dataset.del), { method: "DELETE" });
+  if (d && confirm(`Delete job "${d.dataset.del}"? Its last ping is lost.`)) {
+    try {
+      const r = await fetch("/api/jobs/" + encodeURIComponent(d.dataset.del), { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+      say(`Deleted ${d.dataset.del}.`);
+    } catch (err) {
+      say(err.message === "Failed to fetch" ? unreachable : `Could not delete ${d.dataset.del}: ${err.message}`, true);
+    }
     loadJobs();
   }
 });
@@ -337,20 +377,24 @@ $("#add").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
   const body = { id: f.get("id"), schedule: f.get("schedule"), tz: f.get("tz"), grace_seconds: Number(f.get("grace")) * 60 };
-  const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = await r.json();
-  if (!r.ok) { $("#add-msg").innerHTML = `<span class="error">${esc(data.error)}</span>`; return; }
-  $("#add-msg").textContent = data.updated
+  let r, data;
+  try {
+    r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    data = await r.json();
+  } catch (err) { return say(unreachable, true); }
+  if (!r.ok) return say(data.error, true);
+  say(data.updated
     ? `Updated ${body.id}: new schedule, zone and grace; its last ping is kept.`
-    : `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`;
+    : `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`);
   e.target.reset();
   document.querySelector('#add [name="tz"]').value = browserZone;
   loadJobs();
 });
-setInterval(() => { if (!$("#monitor").hidden) loadJobs(); }, 10000);
+function say(text, isError) { $("#msg").innerHTML = isError ? `<span class="error">${esc(text)}</span>` : esc(text); }
+setInterval(() => { if (!$("#panel-monitor").hidden) loadJobs(); }, 10000);
 
-show(location.hash === "#monitor" ? "monitor" : "explain");
-addEventListener("hashchange", () => show(location.hash === "#monitor" ? "monitor" : "explain"));
+show();
+addEventListener("hashchange", show);
 explain();
 </script>
 </body>
