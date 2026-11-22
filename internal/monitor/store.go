@@ -64,7 +64,7 @@ func OpenStore(path string) (*Store, error) {
 	// Escape the name so ?, # and %xx in it stay part of the file name instead of the URI.
 	// _txlock=immediate: a read-then-write transaction that started deferred got SQLITE_BUSY
 	// at once, without the busy timeout, while "cronplain import" wrote from another process.
-	uri :="file:" + (&url.URL{Path: path}).EscapedPath() + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_txlock=immediate"
+	uri := "file:" + (&url.URL{Path: path}).EscapedPath() + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_txlock=immediate"
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return nil, err
