@@ -59,7 +59,7 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 			continue
 		}
 		if m := envLine.FindStringSubmatch(line); m != nil {
-			if m[1] == "CRON_TZ" || m[1] == "TZ" {
+			if m[1] == "CRON_TZ" { // TZ= reaches only the commands, cron still schedules in its own zone
 				if l, err := time.LoadLocation(strings.Trim(m[2], `"'`)); err == nil {
 					loc = l
 				}

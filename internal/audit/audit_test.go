@@ -59,6 +59,9 @@ func TestAudit(t *testing.T) {
 			[]string{"lines 2, 3, 4 start at the same minute (first at Mon 00:00 UTC), 1 time(s)", "lines 2, 3 start at the same minute (first at Tue 00:00 UTC), 6 time(s)"}, nil},
 		{"CRON_TZ applies to collisions", "PATH=/bin\nCRON_TZ=Europe/Istanbul\n0 3 * * * /a >/dev/null 2>&1\n0 3 * * * /b >/dev/null 2>&1\n", false,
 			[]string{"first at Tue 03:00 +03"}, nil},
+		// cron schedules in its own zone; TZ= only reaches the commands' environment
+		{"TZ does not move the schedule", "PATH=/bin\nTZ=Europe/Istanbul\n0 3 * * * /a >/dev/null 2>&1\n0 3 * * * /b >/dev/null 2>&1\n", false,
+			[]string{"first at Mon 03:00 UTC", "line 2   info  TZ= sets the time zone the commands see"}, nil},
 		{"schedule errors and lints", "PATH=/bin\n61 * * * * /a\n0 0 30 2 * /b >/dev/null 2>&1\n0 9 1-7 * 1 /c >/dev/null 2>&1\n0 0 * * *\n", false,
 			[]string{"line 2   error minute: 61 is out of range", "line 3   warn  0 0 30 2 *: This schedule never fires", "line 4   warn  0 9 1-7 * 1: Both day-of-month", "line 5   error no command"}, nil},
 		{"system crontab user field", "PATH=/bin\n17 * * * * root /usr/sbin/logrotate /etc/logrotate.conf >/dev/null 2>&1\n@daily www-data /srv/clean >/dev/null 2>&1\n", true,

@@ -49,7 +49,7 @@ func TestAddPings(t *testing.T) {
 		"0 1 * * * /opt/bin/bg &",                                                     // 9: background skipped
 		"0 2 * * * /opt/bin/x # nightly",                                              // 10: comment skipped
 		"61 * * * * /opt/bin/bad",                                                     // 11: invalid
-		"TZ=UTC",                                                                      // 12
+		"TZ=UTC",                                                                      // 12: commands only, cron still uses CRON_TZ
 		"0 5 * * * /opt/bin/backup && /opt/bin/upload\r",                              // 13: CRLF kept out of the ping
 		"0 6 * * * /opt/bin/tidy ; ",                                                  // 14: its own ; is dropped, not doubled
 		`0 7 * * * find /tmp -exec rm {} \;`,                                          // 15: find's \; stays
@@ -69,10 +69,10 @@ func TestAddPings(t *testing.T) {
 		"4 backup-3 0 4 * * * Europe/Istanbul false",
 		"5 backup-2 */5 * * * * Europe/Istanbul true",
 		"7 report @daily Europe/Istanbul false",
-		"13 backup-4 0 5 * * * UTC false",
-		"14 tidy 0 6 * * * UTC false",
-		"15 find 0 7 * * * UTC false",
-		"19 b 0 11 * * * UTC false",
+		"13 backup-4 0 5 * * * Europe/Istanbul false",
+		"14 tidy 0 6 * * * Europe/Istanbul false",
+		"15 find 0 7 * * * Europe/Istanbul false",
+		"19 b 0 11 * * * Europe/Istanbul false",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("jobs:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

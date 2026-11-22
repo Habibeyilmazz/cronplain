@@ -84,10 +84,14 @@ func Run(text string, o Options) *Report {
 			val := strings.Trim(m[2], `"'`)
 			env[m[1]] = val
 			if m[1] == "CRON_TZ" || m[1] == "TZ" {
-				if l, err := time.LoadLocation(val); err == nil {
-					loc = l
-				} else {
+				l, err := time.LoadLocation(val)
+				switch {
+				case err != nil:
 					add(n, "error", "unknown time zone %q in %s", val, m[1])
+				case m[1] == "CRON_TZ":
+					loc = l
+				default:
+					add(n, "info", "TZ= sets the time zone the commands see, not when cron runs them: cron schedules in its own zone (cronie reads CRON_TZ= for a per-crontab zone)")
 				}
 			}
 			continue
