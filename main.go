@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -116,6 +117,14 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	return pos, nil
 }
 
+// flagExit is the exit code after the flag package printed an error or the -h usage.
+func flagExit(err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	return 2
+}
+
 func runExplain(args []string, w io.Writer) (int, error) {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	tz := fs.String("tz", "", "IANA time zone to evaluate and show times in (default: local)")
@@ -124,7 +133,7 @@ func runExplain(args []string, w io.Writer) (int, error) {
 	asJSON := fs.Bool("json", false, "print JSON")
 	pos, err := parseArgs(fs, args)
 	if err != nil {
-		return 2, nil
+		return flagExit(err), nil
 	}
 	if len(pos) == 0 {
 		return 2, fmt.Errorf("explain needs an expression, e.g. cronplain explain \"30 2 * * *\"")
@@ -194,7 +203,7 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	asJSON := fs.Bool("json", false, "print JSON")
 	pos, err := parseArgs(fs, args)
 	if err != nil {
-		return 2, nil
+		return flagExit(err), nil
 	}
 	if len(pos) != 1 {
 		return 2, fmt.Errorf("audit needs one file (or - for stdin)")
@@ -246,7 +255,7 @@ func runServe(args []string) (int, error) {
 	fs.StringVar(&cfg.NtfyServer, "ntfy-server", "https://ntfy.sh", "ntfy server")
 	fs.DurationVar(&cfg.Every, "check-every", 30*time.Second, "how often to check for late jobs")
 	if err := fs.Parse(args); err != nil {
-		return 2, nil
+		return flagExit(err), nil
 	}
 	if fs.NArg() > 0 {
 		return 2, fmt.Errorf("serve takes no arguments, got %q", fs.Args())

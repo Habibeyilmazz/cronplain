@@ -84,4 +84,14 @@ func TestAuditCommand(t *testing.T) {
 	if code, _ := runServe([]string{"-not-a-flag"}); code != 2 {
 		t.Errorf("serve with a bad flag: code %d", code)
 	}
+	// Asking for help is not an error.
+	if code, _ := runServe([]string{"-h"}); code != 0 {
+		t.Errorf("serve -h: code %d, want 0", code)
+	}
+	if code, _ := runAudit([]string{"--help"}, nil, &b); code != 0 {
+		t.Errorf("audit --help: code %d, want 0", code)
+	}
+	if code, _ := runExplain([]string{"-h"}, &b); code != 0 {
+		t.Errorf("explain -h: code %d, want 0", code)
+	}
 }
