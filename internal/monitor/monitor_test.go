@@ -127,9 +127,81 @@ func TestAlertFailureHidesSecretURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	a.RetryDelays = nil
 	a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
 	if s := out.String(); strings.Contains(s, "SECRET-PATH") || strings.Contains(s, "secret-topic") || strings.Count(s, "delivery to") != 2 {
 		t.Errorf("log leaks the alert URL or misses a failure:\n%s", s)
+	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+func (l *lockedBuffer) String() string { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
+
+// A webhook that is down for a moment still gets the alert; one that refuses it
+// (4xx other than 429) is not retried.
+func TestAlertRetries(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		codes    []int // response per attempt; 200 after the list
+		attempts int
+		giveUp   bool
+	}{
+		{"recovers after 503 and 429", []int{503, 429}, 3, false},
+		{"outage outlasts the retries", []int{502, 502, 502}, 3, true},
+		{"client error is final", []int{404}, 1, false},
+		{"first try works", nil, 1, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var mu sync.Mutex
+			n := 0
+			done := make(chan struct{}, 10)
+			hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				code := 200
+				if n < len(c.codes) {
+					code = c.codes[n]
+				}
+				n++
+				mu.Unlock()
+				w.WriteHeader(code)
+				done <- struct{}{}
+			}))
+			defer hook.Close()
+			var out lockedBuffer
+			a, err := NewAlerter(&out, hook.URL, "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.RetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+			a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
+			for range c.attempts {
+				wait(t, done)
+			}
+			if c.giveUp {
+				deadline := time.Now().Add(5 * time.Second)
+				for !strings.Contains(out.String(), "giving up after 3 attempts") && time.Now().Before(deadline) {
+					time.Sleep(time.Millisecond)
+				}
+			}
+			time.Sleep(20 * time.Millisecond) // no extra attempt may follow
+			mu.Lock()
+			defer mu.Unlock()
+			if n != c.attempts {
+				t.Errorf("%d attempts, want %d", n, c.attempts)
+			}
+			if got := strings.Contains(out.String(), "giving up"); got != c.giveUp {
+				t.Errorf("gave up = %v, want %v:\n%s", got, c.giveUp, out.String())
+			}
+		})
 	}
 }
 

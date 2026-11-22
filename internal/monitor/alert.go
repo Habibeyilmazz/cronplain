@@ -29,13 +29,17 @@ type Alerter struct {
 	Webhook string // http(s) URL, or ""
 	Ntfy    string // full topic URL, or ""
 	Client  *http.Client
+	// RetryDelays are the waits before each new attempt after a failed delivery
+	// (network error, HTTP 429 or 5xx). Retries run in the background.
+	RetryDelays []time.Duration
 }
 
 var topicPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // NewAlerter validates the user's alert settings.
 func NewAlerter(out io.Writer, webhook, ntfyServer, topic string) (*Alerter, error) {
-	a := &Alerter{Out: out, Client: &http.Client{Timeout: 10 * time.Second}}
+	a := &Alerter{Out: out, Client: &http.Client{Timeout: 10 * time.Second},
+		RetryDelays: []time.Duration{30 * time.Second, 2 * time.Minute, 10 * time.Minute}}
 	if webhook != "" {
 		if err := httpURL(webhook); err != nil {
 			return nil, fmt.Errorf("-webhook: %w", err)
@@ -78,11 +82,32 @@ func (a *Alerter) Send(al Alert) {
 	}
 }
 
+// post tries once now; if that fails in a way that may pass later, it keeps
+// trying in the background after each of RetryDelays.
+// shortcut: pending retries are lost when the process exits; persist them if that matters.
 func (a *Alerter) post(target, ctype string, body []byte, headers map[string]string) {
+	if !a.attempt(target, ctype, body, headers) || len(a.RetryDelays) == 0 {
+		return
+	}
+	go func() {
+		for i, d := range a.RetryDelays {
+			time.Sleep(d)
+			if !a.attempt(target, ctype, body, headers) {
+				return
+			}
+			if i == len(a.RetryDelays)-1 {
+				fmt.Fprintf(a.Out, "alert delivery: giving up after %d attempts\n", i+2)
+			}
+		}
+	}()
+}
+
+// attempt delivers once and reports whether a later retry could succeed.
+func (a *Alerter) attempt(target, ctype string, body []byte, headers map[string]string) (retry bool) {
 	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
 		fmt.Fprintf(a.Out, "alert delivery failed: %v\n", err)
-		return
+		return false
 	}
 	req.Header.Set("Content-Type", ctype)
 	for k, v := range headers {
@@ -95,11 +120,13 @@ func (a *Alerter) post(target, ctype string, body []byte, headers map[string]str
 			err = ue.Err
 		}
 		fmt.Fprintf(a.Out, "alert delivery to %s failed: %v\n", req.URL.Host, err)
-		return
+		return true
 	}
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		fmt.Fprintf(a.Out, "alert delivery to %s failed: HTTP %d\n", req.URL.Host, resp.StatusCode)
+		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
 	}
+	return false
 }
