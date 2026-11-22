@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -174,7 +175,7 @@ func runExplain(args []string, w io.Writer) (int, error) {
 				return 2, fmt.Errorf("%w\n%q is a file here: the shell turns an unquoted * into file names, so put the expression in quotes, e.g. cronplain explain \"0 9 * * 1\"", err, a)
 			}
 		}
-		return 2, err
+		return 2, fmt.Errorf("%w%s", err, caret(strings.Join(pos, " "), d, err))
 	}
 	if *asJSON {
 		enc := json.NewEncoder(w)
@@ -183,6 +184,52 @@ func runExplain(args []string, w io.Writer) (int, error) {
 	}
 	printExplanation(w, e)
 	return 0, nil
+}
+
+var (
+	badField   = regexp.MustCompile(`^(second|minute|hour|day-of-month|month|day-of-week|year): `)
+	cronFields = regexp.MustCompile(`^[\w*?/,#-]+$`)
+)
+
+// caret returns the expression with ^^^ under the field an error such as
+// "day-of-month: 32 is out of range" names, or "" when the field layout is not
+// certain (systemd, a pasted YAML line, a field count the dialect does not have).
+func caret(expr string, d sched.Dialect, err error) string {
+	m := badField.FindStringSubmatch(err.Error())
+	if m == nil {
+		return ""
+	}
+	toks := strings.Fields(expr)
+	if len(toks) > 0 && strings.Contains(toks[0], "TZ=") {
+		toks = toks[1:]
+	}
+	five := []string{"minute", "hour", "day-of-month", "month", "day-of-week"}
+	aws := append(five, "year")
+	seconds := append([]string{"second"}, aws...)
+	var layout []string
+	if t := strings.Trim(strings.Join(toks, " "), `'"`); strings.HasPrefix(t, "cron(") && strings.HasSuffix(t, ")") {
+		toks, layout = strings.Fields(t[len("cron("):len(t)-1]), aws
+	} else {
+		switch {
+		case len(toks) == 5 && (d == sched.Auto || d == sched.Cron || d == sched.GitHubActions):
+			layout = five
+		case len(toks) == 6 && (d == sched.Auto || d == sched.CronSeconds || d == sched.Quartz):
+			layout = seconds[:6]
+		case len(toks) == 7 && (d == sched.Auto || d == sched.Quartz):
+			layout = seconds
+		case len(toks) == 6 && d == sched.AWS:
+			layout = aws
+		}
+	}
+	if len(toks) != len(layout) || !cronFields.MatchString(strings.Join(toks, "")) {
+		return "" // also a pasted "- cron: '...'" line, whose words are not the fields
+	}
+	i := slices.Index(layout, m[1])
+	if i < 0 {
+		return ""
+	}
+	col := len(strings.Join(toks[:i], " ")) + min(i, 1) // cronFields: ASCII only
+	return "\n  " + strings.Join(toks, " ") + "\n  " + strings.Repeat(" ", col) + strings.Repeat("^", len(toks[i]))
 }
 
 func printExplanation(w io.Writer, e *sched.Explanation) {

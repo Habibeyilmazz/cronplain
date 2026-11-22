@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Habibeyilmazz/cronplain/internal/monitor"
+	"github.com/Habibeyilmazz/cronplain/internal/sched"
 )
 
 func TestExplainCommand(t *testing.T) {
@@ -174,5 +176,34 @@ func TestImportCommand(t *testing.T) {
 	// A bad -grace is the flag's fault, not line 1's, and is refused even for an empty crontab.
 	if code, err := runImport([]string{"-dry-run", "-grace", "200h", "-"}, strings.NewReader(""), io.Discard, io.Discard); code != 2 || err == nil || !strings.HasPrefix(err.Error(), "-grace") {
 		t.Errorf("-grace 200h: exit %d, err %v", code, err)
+	}
+}
+
+func TestCaret(t *testing.T) {
+	for _, c := range []struct {
+		expr string
+		d    sched.Dialect
+		want string // "" = no caret
+	}{
+		{"0 9 32 * *", sched.Auto, "  0 9 32 * *\n      ^^"},
+		{"61 9 * * *", sched.Cron, "  61 9 * * *\n  ^^"},
+		{"0 9 * * MONX", sched.Auto, "  0 9 * * MONX\n          ^^^^"},
+		{"CRON_TZ=UTC 0 25 * * *", sched.Auto, "  0 25 * * *\n    ^^"},
+		{"0 0 12 ? * 9#3", sched.Auto, "  0 0 12 ? * 9#3\n             ^^^"},
+		{"0 0 12 * * ? 1969", sched.Quartz, "  0 0 12 * * ? 1969\n               ^^^^"},
+		{"cron(0 25 * * ? *)", sched.Auto, "  0 25 * * ? *\n    ^^"},
+		{"0 25 * * ? *", sched.AWS, "  0 25 * * ? *\n    ^^"},
+		{"0 9 32 * *", sched.Quartz, ""}, // 5 fields is not a Quartz layout
+		{"Mon 25:00", sched.Systemd, ""}, // systemd has no fixed fields
+		{"- cron: '61 * * * *'", sched.Auto, ""},
+	} {
+		_, err := sched.Explain(c.expr, c.d, time.UTC, 1, time.Now())
+		if err == nil {
+			t.Fatalf("%q: no error", c.expr)
+		}
+		got := strings.TrimPrefix(caret(c.expr, c.d, err), "\n")
+		if got != c.want {
+			t.Errorf("%q (%v): caret\n%s\nwant\n%s", c.expr, err, got, c.want)
+		}
 	}
 }
