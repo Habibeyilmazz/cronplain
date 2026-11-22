@@ -137,8 +137,9 @@ func (s *Schedule) timePart() string {
 		text = fmt.Sprintf("at minute %d past %s", s.min.items[0].lo, hours)
 	case strings.HasPrefix(phrase(s.min, "minute", "minutes", num), "every"):
 		text = phrase(s.min, "minute", "minutes", num) + " during " + hours
-		if it := s.hour.items[0]; len(s.hour.items) == 1 && !it.star && it.step == 1 && len(s.min.items) == 1 && s.min.items[0].star {
+		if it := s.hour.items[0]; len(s.hour.items) == 1 && !it.star && it.step == 1 && len(s.min.items) == 1 && s.min.items[0].star && 60%s.min.items[0].step == 0 {
 			// One block of hours reads better as clock times: "from 09:00 through 17:45".
+			// Not for uneven steps such as */7, where the gap before each full hour is shorter.
 			m := s.min.values()
 			text = fmt.Sprintf("%s from %02d:%02d through %02d:%02d", phrase(s.min, "minute", "minutes", num), it.lo, m[0], it.hi, m[len(m)-1])
 		}

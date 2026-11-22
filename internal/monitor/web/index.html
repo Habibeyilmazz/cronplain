@@ -47,7 +47,7 @@ nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
 .expr-box label { display: block; color: var(--muted); font-size: 15px; margin-bottom: 6px; }
 #expr { width: 100%; font: 600 clamp(24px, 5vw, 40px)/1.2 var(--mono); color: var(--ink); background: var(--sheet);
   border: 2px solid var(--ink); border-radius: 10px; padding: 14px 16px; letter-spacing: 0.02em; }
-#expr[aria-invalid="true"] { border-color: var(--late); }
+[aria-invalid="true"] { border-color: var(--late) !important; }
 .fields { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 2px 0; min-height: 44px; }
 .fields div { display: flex; flex-direction: column; }
 .fields code { font: 600 18px/1.3 var(--mono); border-bottom: 3px solid var(--accent); padding-bottom: 2px; align-self: flex-start; }
@@ -269,8 +269,12 @@ async function explain() {
     data = { error: unreachable, offline: true };
   }
   if (my !== seq) return;
-  if (data.error) return clear(`<span class="error">${esc(data.error)}</span>`, !data.offline);
-  $("#expr").removeAttribute("aria-invalid");
+  if (data.error) {
+    // The API names a bad zone or run count; anything else is about the expression.
+    const bad = data.offline ? null : /^unknown time zone/.test(data.error) ? "#tz" : /^n must be/.test(data.error) ? "#n" : "#expr";
+    return clear(`<span class="error">${esc(data.error.replace(/^n must be/, "Runs must be"))}</span>`, bad);
+  }
+  for (const id of ["#expr", "#tz", "#n"]) $(id).removeAttribute("aria-invalid");
   $("#sentence").classList.remove("stale");
   $("#results").classList.remove("stale");
   $("#results").hidden = false;
@@ -292,13 +296,13 @@ async function explain() {
   $("#lints").innerHTML = data.lints.length ? data.lints.map((l) => `<li class="${esc(l.level)}">${esc(l.message)}</li>`).join("") : `<li class="none">Nothing surprising about this schedule.</li>`;
 }
 // clear replaces the results with one message (empty input or an error).
-function clear(html, invalid) {
+function clear(html, invalid) { // invalid: selector of the input to mark, if any
   $("#sentence").innerHTML = html;
   $("#sentence").classList.remove("stale");
   $("#meta").textContent = "";
   $("#fields").innerHTML = "";
   $("#results").hidden = true;
-  if (invalid) $("#expr").setAttribute("aria-invalid", "true"); else $("#expr").removeAttribute("aria-invalid");
+  for (const id of ["#expr", "#tz", "#n"]) if (id === invalid) $(id).setAttribute("aria-invalid", "true"); else $(id).removeAttribute("aria-invalid");
 }
 function soon() { clearTimeout(timer); timer = setTimeout(explain, 200); }
 for (const id of ["#expr", "#tz", "#n"]) $(id).addEventListener("input", soon);

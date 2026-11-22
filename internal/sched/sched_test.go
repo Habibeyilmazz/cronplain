@@ -112,6 +112,7 @@ func TestDescribe(t *testing.T) {
 		"*/15 9-17 * * 1-5":     "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
 		"*/20 9 * * *":          "Every 20 minutes from 09:00 through 09:40.",
 		"* 22-23 * * *":         "Every minute from 22:00 through 23:59.",
+		"*/7 9-17 * * *":        "Every 7 minutes during hours 9 through 17.",
 		"0-30/10 9-17 * * *":    "Every 10 minutes from 0 through 30 during hours 9 through 17.",
 		"0 9 * * MON,WED,FRI":   "At 09:00 on Monday, Wednesday and Friday.",
 		"0 0 1 1,7 *":           "At 00:00 on day 1 of the month, in January and July.",
