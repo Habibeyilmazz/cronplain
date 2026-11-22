@@ -43,7 +43,9 @@ func TestAudit(t *testing.T) {
 			[]string{`line 2   warn  "/b" is not redirected`, `line 3   warn  "/c" is not redirected`}, []string{`"/a`, `"/d`}},
 		{"quiet list parts and groups", "PATH=/bin\n0 3 * * * cd /srv && ./run >> /var/log/r.log 2>&1\n" +
 			"0 4 * * * /x >> /var/log/x.log 2>&1; curl -fsS http://127.0.0.1:4230/ping/x/$?\n" +
-			"0 5 * * * { /a; /b; } >> /var/log/ab.log 2>&1\n0 6 * * * /q 'a;b' > /dev/null 2>&1\n", false,
+			"0 5 * * * { /a; /b; } >> /var/log/ab.log 2>&1\n0 6 * * * /q 'a;b' > /dev/null 2>&1\n" +
+			"0 7 * * * /r > /var/log/r.log 2>&1 || echo r failed\n" +
+			"0 8 * * * if [ -x /s ]; then /s; fi > /var/log/s.log 2>&1\n", false,
 			nil, []string{"is not redirected", "output is not redirected"}},
 		{"percent sign", "PATH=/bin\n0 3 * * * tar czf /b/$(date +%F).tgz /d >/dev/null 2>&1\n0 4 * * * date +\\%F >/dev/null 2>&1\n", false,
 			[]string{"line 2   warn  unescaped %"}, []string{"line 3   warn  unescaped"}},

@@ -165,19 +165,33 @@ func checkOutput(n int, cmd string, env map[string]string, add func(int, string,
 		add(n, "info", "only stdout is redirected; errors (stderr) still go to cron mail. Add 2>&1 after the redirect")
 	}
 	// A redirect binds to one command of a list: in "a > log; b", b's output is still mailed.
-	if parts := listParts(cmd); len(parts) > 1 {
+	if parts := listParts(cmd); len(parts) > 1 && !compound(parts) {
 		for _, p := range parts {
 			if !strings.ContainsAny(stderrRedirect.Replace(p), ">|") && !quiet(p) {
-				add(n, "warn", "%q is not redirected: a redirect applies only to its own command in a ; && || list, so cron mails this part's output; redirect it too or group the list: { a; b; } >> /var/log/NAME.log 2>&1", p)
+				add(n, "warn", "%q is not redirected: a redirect applies only to its own command in a ; or && list, so cron mails this part's output; redirect it too or group the list: { a; b; } >> /var/log/NAME.log 2>&1", p)
 			}
 		}
 	}
 }
 
+// compound reports whether a list is really an if/for/while/case statement, whose
+// "; then", "; do" parts are not separate commands; those are left alone.
+func compound(parts []string) bool {
+	for _, p := range parts {
+		switch strings.Fields(p)[0] {
+		case "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac":
+			return true
+		}
+	}
+	return false
+}
+
 // listParts splits a command at top-level ; && || (outside quotes, (), {} and $(...)).
+// A part after || is left out: it runs only on failure, and "|| echo failed" mailing
+// its output is usually the point.
 func listParts(cmd string) []string {
 	var parts []string
-	depth, start := 0, 0
+	depth, start, skip := 0, 0, false
 	var quote byte
 	for i := 0; i < len(cmd); i++ {
 		c := cmd[i]
@@ -197,14 +211,19 @@ func listParts(cmd string) []string {
 		case c == ')' || c == '}':
 			depth--
 		case depth == 0 && (c == ';' || strings.HasPrefix(cmd[i:], "&&") || strings.HasPrefix(cmd[i:], "||")):
-			parts = append(parts, strings.TrimSpace(cmd[start:i]))
+			if !skip {
+				parts = append(parts, strings.TrimSpace(cmd[start:i]))
+			}
+			skip = c == '|'
 			if c != ';' {
 				i++
 			}
 			start = i + 1
 		}
 	}
-	parts = append(parts, strings.TrimSpace(cmd[start:]))
+	if !skip {
+		parts = append(parts, strings.TrimSpace(cmd[start:]))
+	}
 	out := parts[:0]
 	for _, p := range parts {
 		if p != "" {
