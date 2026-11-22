@@ -52,7 +52,12 @@ func main() {
 	case "audit":
 		code, err = runAudit(os.Args[2:], os.Stdin, stdout)
 	case "import":
-		code, err = runImport(os.Args[2:], os.Stdin, os.Stdout, terminal{os.Stderr})
+		// The new crontab goes out byte for byte when redirected to a file, escaped only on a terminal.
+		var out io.Writer = os.Stdout
+		if fi, err := os.Stdout.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+			out = stdout
+		}
+		code, err = runImport(os.Args[2:], os.Stdin, out, terminal{os.Stderr})
 	case "serve":
 		code, err = runServe(os.Args[2:], stdout)
 	case "version", "--version", "-v":
