@@ -160,9 +160,74 @@ func checkOutput(n int, cmd string, env map[string]string, add func(int, string,
 		} else {
 			add(n, "warn", "output is not redirected: cron mails it to MAILTO or the crontab owner, which is often unread or undeliverable; append >> /var/log/NAME.log 2>&1")
 		}
+		return
 	case strings.Contains(cmd, ">") && !strings.Contains(cmd, "2>") && !strings.Contains(cmd, "&>") && !strings.Contains(cmd, "|"):
 		add(n, "info", "only stdout is redirected; errors (stderr) still go to cron mail. Add 2>&1 after the redirect")
 	}
+	// A redirect binds to one command of a list: in "a > log; b", b's output is still mailed.
+	if parts := listParts(cmd); len(parts) > 1 {
+		for _, p := range parts {
+			if !strings.ContainsAny(stderrRedirect.Replace(p), ">|") && !quiet(p) {
+				add(n, "warn", "%q is not redirected: a redirect applies only to its own command in a ; && || list, so cron mails this part's output; redirect it too or group the list: { a; b; } >> /var/log/NAME.log 2>&1", p)
+			}
+		}
+	}
+}
+
+// listParts splits a command at top-level ; && || (outside quotes, (), {} and $(...)).
+func listParts(cmd string) []string {
+	var parts []string
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			} else if c == '\\' && quote == '"' {
+				i++
+			}
+		case c == '\\':
+			i++
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == '(' || c == '{':
+			depth++
+		case c == ')' || c == '}':
+			depth--
+		case depth == 0 && (c == ';' || strings.HasPrefix(cmd[i:], "&&") || strings.HasPrefix(cmd[i:], "||")):
+			parts = append(parts, strings.TrimSpace(cmd[start:i]))
+			if c != ';' {
+				i++
+			}
+			start = i + 1
+		}
+	}
+	parts = append(parts, strings.TrimSpace(cmd[start:]))
+	out := parts[:0]
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// quiet reports whether a list part normally prints nothing on stdout: cd, test, or a silent curl/wget (the ping line).
+func quiet(part string) bool {
+	f := strings.Fields(part)
+	switch f[0] {
+	case "cd", "test", "[", "true", "false", "exit", "sleep", "export":
+		return true
+	case "curl", "wget":
+		for _, a := range f[1:] {
+			if a == "--silent" || a == "--quiet" || (strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.ContainsAny(a, "sq")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func checkEnv(jobs []job, env map[string]string, add func(int, string, string, ...any)) {

@@ -38,6 +38,13 @@ func TestAudit(t *testing.T) {
 			nil, []string{"not redirected", "only stdout"}},
 		{"pipes count as handled output", "PATH=/bin\n0 3 * * * /x | logger -t x\n", false,
 			nil, []string{"not redirected", "only stdout"}},
+		// a redirect binds to one command of a list
+		{"list with one part redirected", "PATH=/bin\n0 3 * * * /a > /var/log/a.log 2>&1; /b\n0 4 * * * /c && /d >> /var/log/d.log 2>&1\n", false,
+			[]string{`line 2   warn  "/b" is not redirected`, `line 3   warn  "/c" is not redirected`}, []string{`"/a`, `"/d`}},
+		{"quiet list parts and groups", "PATH=/bin\n0 3 * * * cd /srv && ./run >> /var/log/r.log 2>&1\n" +
+			"0 4 * * * /x >> /var/log/x.log 2>&1; curl -fsS http://127.0.0.1:4230/ping/x/$?\n" +
+			"0 5 * * * { /a; /b; } >> /var/log/ab.log 2>&1\n0 6 * * * /q 'a;b' > /dev/null 2>&1\n", false,
+			nil, []string{"is not redirected", "output is not redirected"}},
 		{"percent sign", "PATH=/bin\n0 3 * * * tar czf /b/$(date +%F).tgz /d >/dev/null 2>&1\n0 4 * * * date +\\%F >/dev/null 2>&1\n", false,
 			[]string{"line 2   warn  unescaped %"}, []string{"line 3   warn  unescaped"}},
 		{"bash-isms without SHELL", "PATH=/bin\n0 3 * * * [[ -f /x ]] && /y >/dev/null 2>&1\n", false,
