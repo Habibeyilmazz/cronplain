@@ -522,6 +522,55 @@ func TestOpenStoreOddPaths(t *testing.T) {
 	}
 }
 
+// "cronplain import" writes to the database serve has open: pings arriving
+// meanwhile must wait for the lock, not fail with "database is locked".
+func TestPingsDuringWritesFromAnotherProcess(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.db")
+	serve, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serve.Close()
+	other, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if _, err := serve.Upsert(Job{ID: "a", Schedule: "* * * * *", TZ: "UTC"}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error)
+	go func() {
+		for i := range 300 {
+			if _, err := other.Upsert(Job{ID: fmt.Sprintf("j%d", i), Schedule: "0 9 * * *", TZ: "UTC"}); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	for i := 0; ; i++ {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("import side: %v", err)
+			}
+			return
+		default:
+		}
+		var err error
+		if i%2 == 0 {
+			_, err = serve.Ping("a", time.Now())
+		} else {
+			_, err = serve.Fail("a", time.Now())
+		}
+		if err != nil {
+			t.Fatalf("ping %d while another connection writes: %v", i, err)
+		}
+		time.Sleep(time.Millisecond) // pings come from separate cron jobs, not one tight loop
+	}
+}
+
 // A job reports a failure with /ping/ID/fail or its exit status with /ping/ID/$?:
 // alert at once, once per failing streak, and "recovered" on the next success.
 func TestFailurePings(t *testing.T) {
