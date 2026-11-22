@@ -104,10 +104,12 @@ func (s *Schedule) Describe() string {
 		return "Once, when the cron daemon starts (usually at boot). It has no calendar times."
 	}
 	text := s.timePart()
-	if date := s.datePart(); date != "" {
+	date := s.datePart()
+	if singles(s.min) && singles(s.hour) && (date == "" || strings.HasPrefix(date, "in ")) {
+		text += " every day" // no day restriction: "At 09:00 in January" would read as one date
+	}
+	if date != "" {
 		text += " " + date
-	} else if singles(s.min) && singles(s.hour) {
-		text += " every day"
 	}
 	return strings.ToUpper(text[:1]) + text[1:] + "."
 }

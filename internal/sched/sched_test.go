@@ -151,6 +151,11 @@ func TestDescribe(t *testing.T) {
 		"Sat..Mon 10:00":                "At 10:00 on Saturday through Monday.",
 		"cron(0/15 9-17 ? * MON-FRI *)": "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
 		"cron(0 9 ? * 2#1 *)":           "At 09:00 on the 1st Monday of the month.",
+		// a month or year alone must not read as a single date
+		"0 9 * 1 *":      "At 09:00 every day in January.",
+		"0 9,17 * 6 *":   "At 09:00 and 17:00 every day in June.",
+		"2027-*-* 00:00": "At 00:00 every day in 2027.",
+		"*/5 * * 1 *":    "Every 5 minutes in January.",
 		// wrap-around ranges read as one range, not two halves
 		"cron(0 9 ? * FRI-MON *)":       "At 09:00 on Friday through Monday.",
 		"cron(0 9 ? * 2-1 *)":           "At 09:00 on Monday through Sunday.",
