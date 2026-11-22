@@ -146,3 +146,17 @@ test("monitor: a bad schedule is refused with the parser's message", async () =>
   assert.equal(await text("#msg"), "hour: 25 is out of range 0-23");
   assert.match(await text("#jobs"), /No jobs yet/);
 });
+
+test("320 px wide: no sideways scroll (WCAG 1.4.10 reflow)", async () => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto(base + "/#explain");
+  for (const [tz, expr] of [["America/New_York", "30 1 * 11 0"], ["America/Argentina/ComodRivadavia", "*/10 * * * * *"]]) {
+    await page.fill("#tz", tz);
+    await page.fill("#expr", expr);
+    await page.waitForFunction((tz) => document.querySelector("#meta").textContent.includes(tz), tz);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320, `${expr} in ${tz}`);
+  }
+  await page.goto(base + "/#monitor");
+  await page.waitForSelector("#jobs .empty");
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+});
