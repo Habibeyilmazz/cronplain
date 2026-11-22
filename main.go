@@ -2,6 +2,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -94,11 +95,13 @@ func loadZone(name string) (*time.Location, error) {
 // localZone is time.Local under its IANA name (from TZ or the /etc/localtime link),
 // so output says "Europe/Istanbul" rather than "Local".
 func localZone() *time.Location {
-	name := os.Getenv("TZ")
-	if name == "" {
-		if p, err := os.Readlink("/etc/localtime"); err == nil {
-			_, name, _ = strings.Cut(p, "zoneinfo/")
+	name := strings.TrimPrefix(os.Getenv("TZ"), ":") // TZ=:/etc/localtime is common on servers
+	if name == "" || filepath.IsAbs(name) {
+		p := cmp.Or(name, "/etc/localtime")
+		if link, err := os.Readlink(p); err == nil {
+			p = link
 		}
+		_, name, _ = strings.Cut(p, "zoneinfo/")
 	}
 	if loc, err := time.LoadLocation(name); err == nil && name != "" {
 		return loc

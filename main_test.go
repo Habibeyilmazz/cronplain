@@ -71,6 +71,22 @@ func TestLocalZoneName(t *testing.T) {
 	if loc, _ := loadZone(""); loc.String() != "America/New_York" {
 		t.Errorf("local zone = %s", loc)
 	}
+	t.Setenv("TZ", ":America/New_York")
+	if loc, _ := loadZone(""); loc.String() != "America/New_York" {
+		t.Errorf("TZ=:America/New_York: local zone = %s", loc)
+	}
+	// TZ=:/etc/localtime is a common server setting: it names the same zone as no TZ at all.
+	t.Setenv("TZ", "")
+	want := localZone().String()
+	if want == "Local" {
+		t.Skip("/etc/localtime is not a link to a named zone here")
+	}
+	for _, tz := range []string{":/etc/localtime", "/etc/localtime"} {
+		t.Setenv("TZ", tz)
+		if got := localZone().String(); got != want {
+			t.Errorf("TZ=%s: local zone = %s, want %s", tz, got, want)
+		}
+	}
 }
 
 func TestAuditCommand(t *testing.T) {
