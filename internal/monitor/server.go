@@ -46,7 +46,8 @@ type Server struct {
 	alert *Alerter
 	out   io.Writer
 	now   func() time.Time
-	mu    sync.Mutex // serialises late checks against pings
+	mu    sync.Mutex     // serialises late checks against pings
+	sends sync.WaitGroup // alerts that pings deliver in the background
 }
 
 // NewServer wires a server; now is injectable for tests.
@@ -98,11 +99,13 @@ func Serve(cfg Config, out io.Writer) error {
 			}
 		}
 	}()
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shut)
+		srv.Shutdown(shut) // waits for running handlers, so no ping starts an alert after s.Close
 	}()
 	db := cfg.DB
 	if abs, err := filepath.Abs(db); err == nil {
@@ -112,9 +115,17 @@ func Serve(cfg Config, out io.Writer) error {
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-stopped
 	<-checked
-	alert.Close() // alerts still waiting for a retry get one last attempt instead of being dropped
+	s.Close()
 	return nil
+}
+
+// Close waits for alerts that pings started, then gives alerts still waiting
+// for a retry one last attempt instead of dropping them.
+func (s *Server) Close() {
+	s.sends.Wait()
+	s.alert.Close()
 }
 
 // Handler builds the routes. addr is the listening host:port, used to reject
@@ -297,15 +308,22 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(s.out, "ping %s: %v\n", id, err)
 		return
 	}
-	switch {
-	case changed && exit == 0:
-		go s.alert.Send(Alert{Job: id, State: "recovered", Message: fmt.Sprintf("job %q succeeded again and is back on schedule", id)})
-	case changed && exit > 0:
-		go s.alert.Send(Alert{Job: id, State: "failed", ExitStatus: &exit, Message: fmt.Sprintf("job %q failed with exit status %d", id, exit)})
-	case changed:
-		go s.alert.Send(Alert{Job: id, State: "failed", Message: fmt.Sprintf("job %q reported a failure", id)})
+	// The answer is 200 with no body: "curl -fsS" then prints nothing, so cron has no output to mail after every run.
+	if !changed {
+		return
 	}
-	// 200 with no body: "curl -fsS" then prints nothing, so cron has no output to mail after every run.
+	a := Alert{Job: id, State: "failed", Message: fmt.Sprintf("job %q reported a failure", id)}
+	switch {
+	case exit == 0:
+		a = Alert{Job: id, State: "recovered", Message: fmt.Sprintf("job %q succeeded again and is back on schedule", id)}
+	case exit > 0:
+		a = Alert{Job: id, State: "failed", ExitStatus: &exit, Message: fmt.Sprintf("job %q failed with exit status %d", id, exit)}
+	}
+	s.sends.Add(1) // before the handler returns, so Close (after the HTTP server has stopped) waits for it
+	go func() {
+		defer s.sends.Done()
+		s.alert.Send(a)
+	}()
 }
 
 // Check alerts once for every job whose expected ping is overdue.

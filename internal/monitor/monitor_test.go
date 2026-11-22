@@ -685,3 +685,33 @@ func TestOpenStoreAddsLastFail(t *testing.T) {
 		s.Close()
 	}
 }
+
+// A failure ping answered just before serve stops must still reach the webhook:
+// Close waits for alerts that pings started, not only for retries.
+func TestCloseWaitsForAlertsFromPings(t *testing.T) {
+	h := newHarness(t)
+	got := make(chan Alert, 1)
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		var a Alert
+		json.NewDecoder(r.Body).Decode(&a)
+		got <- a
+	}))
+	defer slow.Close()
+	h.s.alert.Webhook, h.s.alert.Ntfy = slow.URL, ""
+	if code, body := h.do(t, "POST", "/api/jobs", `{"id":"backup","schedule":"0 3 * * *","tz":"UTC"}`, nil); code != 200 {
+		t.Fatalf("add: %d %s", code, body)
+	}
+	if code, _ := h.do(t, "GET", "/ping/backup/3", "", nil); code != 200 {
+		t.Fatalf("ping: %d", code)
+	}
+	h.s.Close()
+	select {
+	case a := <-got:
+		if a.State != "failed" {
+			t.Errorf("alert %+v", a)
+		}
+	default:
+		t.Fatal("Close returned before the failure alert was delivered")
+	}
+}
