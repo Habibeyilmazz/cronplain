@@ -119,7 +119,7 @@ func Run(text string, o Options) *Report {
 		r.Jobs++
 		jobs = append(jobs, job{line: n, schedule: expr, command: cmd, sched: s, loc: loc})
 		// Lines copied between /etc/crontab (with a user field) and a user crontab (without).
-		switch first, _, _ := strings.Cut(cmd, " "); {
+		switch first := strings.Fields(cmd)[0]; {
 		case o.System && !userName.MatchString(head[schedLen]):
 			add(n, "error", "the user field is %q, which is not a user name: system crontabs need the user after the schedule. If this is a user crontab (crontab -e), audit it without -system", head[schedLen])
 		case !o.System && first == "root":
