@@ -128,7 +128,7 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 The older form `cmd && curl -fsS .../ping/ID` still works; it only reports successes, so a failure shows up as "late" at the next run.
 
 Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state` (`late`, `failed` or `recovered`), `schedule` and `due` (on `late`), `last_ping`, `exit_status` (on `failed` from `/ping/ID/N`) and `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
-Jobs and ping times live in one SQLite file (`-db`, created readable by your user only). A failed webhook or ntfy delivery (network error, HTTP 429 or 5xx) is logged and retried in the background after 30 s, 2 min and 10 min; other 4xx answers are not retried, and retries still pending when `serve` stops are lost. The terminal line is always written. Pings accept `GET`, `POST` or `HEAD`.
+Jobs and ping times live in one SQLite file (`-db`, created readable by your user only). A failed webhook or ntfy delivery (network error, HTTP 429 or 5xx) is logged and retried in the background after 30 s, 2 min and 10 min; other 4xx answers are not retried. When `serve` stops (Ctrl-C or SIGTERM), each alert still waiting for a retry gets one last attempt at once; if that fails too, it is dropped and the log says so. The terminal line is always written. Pings accept `GET`, `POST` or `HEAD`.
 Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
 The page follows the system light or dark theme, works at phone width, and is usable from the keyboard alone.
 

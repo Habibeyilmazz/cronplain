@@ -209,6 +209,43 @@ func TestAlertRetries(t *testing.T) {
 	}
 }
 
+// Stopping serve while a retry waits (minutes away) tries it once more at once
+// instead of dropping the alert; an alert sent after that gets no retry.
+func TestAlertRetryOnClose(t *testing.T) {
+	var mu sync.Mutex
+	codes := []int{503, 200, 503}
+	n := 0
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		w.WriteHeader(codes[n])
+		n++
+		mu.Unlock()
+	}))
+	defer hook.Close()
+	var out lockedBuffer
+	a, err := NewAlerter(&out, hook.URL, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.RetryDelays = []time.Duration{time.Hour, time.Hour}
+	a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
+	done := make(chan struct{})
+	go func() { a.Close(); close(done) }()
+	wait(t, done)
+	mu.Lock()
+	if n != 2 {
+		t.Errorf("%d attempts by the time Close returned, want 2", n)
+	}
+	mu.Unlock()
+	a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
+	a.Close() // idempotent
+	mu.Lock()
+	defer mu.Unlock()
+	if n != 3 || !strings.Contains(out.String(), "giving up, cronplain is stopping") {
+		t.Errorf("after close: %d attempts, out:\n%s", n, out.String())
+	}
+}
+
 type clock struct {
 	mu sync.Mutex
 	t  time.Time

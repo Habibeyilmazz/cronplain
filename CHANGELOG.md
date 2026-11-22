@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dashboard: a red "Failed" status, "failed N min ago" under the last success (the column is now called "Last success"), the intro and the "Added" message show the `; curl .../ping/ID/$?` form, and "Copy ping" copies `curl -fsS .../ping/ID/$?`. `monitor.png` and `monitor-mobile.png` retaken from the running app with a failed job.
 - Databases from earlier versions gain a `last_fail` column when `serve` opens them (tested against a database with the old schema).
 
+### Fixed (feature round 7)
+- Alerts waiting for a retry were dropped when `serve` stopped (Ctrl-C, SIGTERM, a restart), so a webhook that was down at the moment of a failure never heard of it. On shutdown each waiting retry now makes one last attempt at once and `serve` waits for it (bounded by the 10 s client timeout); an alert raised after that is tried once. Checked with the real binary against a webhook that answered 503, then 200. A retry that fails at shutdown too is still lost (not persisted).
+
 ### Changed (feature round 7)
 - The "recovered" message reads "job X succeeded again and is back on schedule" (was "pinged again"), since a failure is also a ping now.
 

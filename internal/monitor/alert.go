@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,11 @@ type Alerter struct {
 	// RetryDelays are the waits before each new attempt after a failed delivery
 	// (network error, HTTP 429 or 5xx). Retries run in the background.
 	RetryDelays []time.Duration
+
+	mu      sync.Mutex
+	closed  bool
+	stop    chan struct{} // closed by Close: waiting retries try once more at once
+	retries sync.WaitGroup
 }
 
 var topicPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -40,7 +46,7 @@ var topicPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // NewAlerter validates the user's alert settings.
 func NewAlerter(out io.Writer, webhook, ntfyServer, topic string) (*Alerter, error) {
 	a := &Alerter{Out: out, Client: &http.Client{Timeout: 10 * time.Second},
-		RetryDelays: []time.Duration{30 * time.Second, 2 * time.Minute, 10 * time.Minute}}
+		RetryDelays: []time.Duration{30 * time.Second, 2 * time.Minute, 10 * time.Minute}, stop: make(chan struct{})}
 	if webhook != "" {
 		if err := httpURL(webhook); err != nil {
 			return nil, fmt.Errorf("-webhook: %w", err)
@@ -87,15 +93,32 @@ func (a *Alerter) Send(al Alert) {
 }
 
 // post tries once now; if that fails in a way that may pass later, it keeps
-// trying in the background after each of RetryDelays.
-// shortcut: pending retries are lost when the process exits; persist them if that matters.
+// trying in the background after each of RetryDelays, or once more at Close.
+// shortcut: a retry that also fails at Close is lost; persist retries if restarts during outages matter.
 func (a *Alerter) post(target, ctype string, body []byte, headers map[string]string) {
 	if !a.attempt(target, ctype, body, headers) || len(a.RetryDelays) == 0 {
 		return
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		fmt.Fprintf(a.Out, "alert delivery: giving up, cronplain is stopping\n")
+		return
+	}
+	a.retries.Add(1)
 	go func() {
+		defer a.retries.Done()
 		for i, d := range a.RetryDelays {
-			time.Sleep(d)
+			t := time.NewTimer(d)
+			select {
+			case <-t.C:
+			case <-a.stop:
+				t.Stop()
+				if a.attempt(target, ctype, body, headers) {
+					fmt.Fprintf(a.Out, "alert delivery: giving up after %d attempts, cronplain is stopping\n", i+2)
+				}
+				return
+			}
 			if !a.attempt(target, ctype, body, headers) {
 				return
 			}
@@ -104,6 +127,18 @@ func (a *Alerter) post(target, ctype string, body []byte, headers map[string]str
 			}
 		}
 	}()
+}
+
+// Close makes every waiting retry try once more now, and waits for them
+// (each attempt is bounded by the client timeout).
+func (a *Alerter) Close() {
+	a.mu.Lock()
+	if !a.closed {
+		a.closed = true
+		close(a.stop)
+	}
+	a.mu.Unlock()
+	a.retries.Wait()
 }
 
 // attempt delivers once and reports whether a later retry could succeed.

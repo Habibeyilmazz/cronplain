@@ -83,7 +83,9 @@ func Serve(cfg Config, out io.Writer) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	checked := make(chan struct{})
 	go func() {
+		defer close(checked)
 		t := time.NewTicker(cfg.Every)
 		defer t.Stop()
 		for {
@@ -105,6 +107,8 @@ func Serve(cfg Config, out io.Writer) error {
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-checked
+	alert.Close() // alerts still waiting for a retry get one last attempt instead of being dropped
 	return nil
 }
 
