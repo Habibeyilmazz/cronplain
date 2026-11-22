@@ -66,6 +66,11 @@ func TestAudit(t *testing.T) {
 			[]string{"line 2   error minute: 61 is out of range", "line 3   warn  0 0 30 2 *: This schedule never fires", "line 4   warn  0 9 1-7 * 1: Both day-of-month", "line 5   error no command"}, nil},
 		{"system crontab user field", "PATH=/bin\n17 * * * * root /usr/sbin/logrotate /etc/logrotate.conf >/dev/null 2>&1\n@daily www-data /srv/clean >/dev/null 2>&1\n", true,
 			[]string{"2 job(s): 0 error(s), 0 warning(s)"}, nil},
+		// lines copied between /etc/crontab and a user crontab
+		{"user field in a user crontab", "PATH=/bin\nSHELL=/bin/sh\n0 3 * * * root /usr/bin/x >/dev/null 2>&1\n0 4 * * * rootkit-scan >/dev/null 2>&1\n", false,
+			[]string{`line 3   error "root" is a user name, not a command`}, []string{"line 4   error"}},
+		{"no user field in a system crontab", "PATH=/bin\nSHELL=/bin/sh\n0 3 * * * /usr/bin/x >/dev/null 2>&1\n0 4 * * * nobody$ /usr/bin/y >/dev/null 2>&1\n", true,
+			[]string{`line 3   error the user field is "/usr/bin/x"`}, []string{"line 4   error"}},
 		{"reboot jobs are fine", "PATH=/bin\n@reboot /warm >/dev/null 2>&1\n", false,
 			[]string{"1 job(s): 0 error(s), 0 warning(s)"}, nil},
 		// files saved by Windows editors

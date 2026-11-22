@@ -43,6 +43,7 @@ type job struct {
 var (
 	envLine   = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$`)
 	bareCent  = regexp.MustCompile(`(^|[^\\])%`)
+	userName  = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]*\$?$`) // POSIX portable names; Samba machine accounts end in $
 	bashism   = regexp.MustCompile(`\[\[|\bsource\s|&>|<\(`)
 	lockTools = regexp.MustCompile(`\b(flock|run-one|lockrun|solo|chronic)\b`)
 	// stderrRedirect removes stderr-only redirections: "cmd 2>/dev/null" still mails stdout.
@@ -117,6 +118,13 @@ func Run(text string, o Options) *Report {
 		}
 		r.Jobs++
 		jobs = append(jobs, job{line: n, schedule: expr, command: cmd, sched: s, loc: loc})
+		// Lines copied between /etc/crontab (with a user field) and a user crontab (without).
+		switch first, _, _ := strings.Cut(cmd, " "); {
+		case o.System && !userName.MatchString(head[schedLen]):
+			add(n, "error", "the user field is %q, which is not a user name: system crontabs need the user after the schedule. If this is a user crontab (crontab -e), audit it without -system", head[schedLen])
+		case !o.System && first == "root":
+			add(n, "error", `"root" is a user name, not a command: this looks like a line from /etc/crontab or /etc/cron.d, but in a user crontab cron runs "root" as the command. Drop it, or audit a system crontab with -system`)
+		}
 		for _, l := range s.Lints(o.From) {
 			if l.Level == "warn" {
 				add(n, "warn", "%s: %s", expr, l.Message)
