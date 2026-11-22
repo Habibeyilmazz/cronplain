@@ -1,0 +1,12 @@
+{
+  "name": "cronplain-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser test of the cronplain serve dashboard",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}
