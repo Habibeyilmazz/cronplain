@@ -141,6 +141,9 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 			text = strings.TrimSpace(after)
 		}
 	}
+	if text == "" {
+		return nil, fmt.Errorf("no schedule after the prefix")
+	}
 	s.Expr = text
 	if d == Auto {
 		d = detect(text)

@@ -95,3 +95,12 @@ func TestSplitFields(t *testing.T) {
 		t.Errorf("got %q %q", head, rest)
 	}
 }
+
+// FuzzAudit checks that no crontab text panics the audit.
+func FuzzAudit(f *testing.F) {
+	f.Add("PATH=/bin\n0 3 * * * /x >/dev/null 2>&1\n", false)
+	f.Add("CRON_TZ=Europe/Istanbul\n@daily root /x\n*/2 * * * * y %\n", true)
+	f.Fuzz(func(t *testing.T, text string, system bool) {
+		Run(text, Options{System: system, Location: time.UTC, From: from})
+	})
+}
