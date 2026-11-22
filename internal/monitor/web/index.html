@@ -75,7 +75,7 @@ h2 { font-size: 17px; margin: 0 0 10px; }
 .timetable { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
 .timetable table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .timetable td { padding: 7px 14px; border-top: 1px solid var(--rule); white-space: nowrap; }
-.timetable tr:first-child td { border-top: 0; }
+.timetable tbody tr:first-child td { border-top: 0; }
 .timetable .day { color: var(--muted); width: 3.5em; }
 .timetable .time { font-weight: 650; }
 .timetable .zone { color: var(--muted); text-align: right; font-size: 14px; }
@@ -184,10 +184,10 @@ form.add input { width: 100%; }
       <p id="sentence"></p>
       <p id="meta"></p>
     </div>
-    <div class="cols" id="results">
+    <div class="cols" id="results" hidden>
       <div>
         <h2 id="runs-title">Next runs</h2>
-        <div class="timetable"><table><tbody id="runs"></tbody></table></div>
+        <div class="timetable"><table aria-labelledby="runs-title"><thead class="sr"><tr><th>Day</th><th>Date</th><th>Time</th><th>UTC offset</th></tr></thead><tbody id="runs"></tbody></table></div>
       </div>
       <div class="notes">
         <h2>Clock changes</h2>
@@ -200,8 +200,9 @@ form.add input { width: 100%; }
 
   <section id="panel-monitor" aria-label="Heartbeat monitor" hidden>
     <p class="intro">End each job's crontab line with <code id="ping-example">; curl -fsS http://127.0.0.1:4230/ping/JOB-NAME/$?</code> to report its exit status: 0 is a success, anything else raises a "failed" alert at once. If no ping has arrived by the next scheduled run plus the grace period, cronplain raises a "late" alert. Alerts go to the terminal and to any webhook or ntfy topic you started it with.</p>
+    <h2 class="sr">Jobs</h2>
     <div id="jobs"></div>
-    <form class="add" id="add">
+    <form class="add" id="add" hidden>
       <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="nightly-backup"></label>
       <label>Schedule <input name="schedule" required placeholder="0 3 * * *" spellcheck="false"></label>
       <label>Time zone <input name="tz" list="zones" required></label>
@@ -278,7 +279,7 @@ async function explain() {
     const bad = data.offline ? null : /^unknown time zone/.test(data.error) ? "#tz" : /^n must be/.test(data.error) ? "#n" : "#expr";
     return clear(`<span class="error">${esc(data.error.replace(/^n must be/, "Runs must be"))}</span>`, bad);
   }
-  for (const id of ["#expr", "#tz", "#n"]) $(id).removeAttribute("aria-invalid");
+  for (const id of ["#expr", "#tz", "#n"]) { $(id).removeAttribute("aria-invalid"); $(id).removeAttribute("aria-describedby"); }
   $("#sentence").classList.remove("stale");
   $("#results").classList.remove("stale");
   $("#results").hidden = false;
@@ -306,7 +307,10 @@ function clear(html, invalid) { // invalid: selector of the input to mark, if an
   $("#meta").textContent = "";
   $("#fields").innerHTML = "";
   $("#results").hidden = true;
-  for (const id of ["#expr", "#tz", "#n"]) if (id === invalid) $(id).setAttribute("aria-invalid", "true"); else $(id).removeAttribute("aria-invalid");
+  for (const id of ["#expr", "#tz", "#n"]) {
+    if (id === invalid) { $(id).setAttribute("aria-invalid", "true"); $(id).setAttribute("aria-describedby", "sentence"); }
+    else { $(id).removeAttribute("aria-invalid"); $(id).removeAttribute("aria-describedby"); }
+  }
 }
 function soon() { clearTimeout(timer); timer = setTimeout(explain, 200); }
 for (const id of ["#expr", "#tz", "#n"]) $(id).addEventListener("input", soon);
@@ -340,21 +344,28 @@ function until(iso) {
   return "in " + Math.round(s / 86400) + " days";
 }
 const stateText = { up: "On time", late: "Late", failed: "Failed", new: "Waiting", never: "Never runs again" };
+let jobsHTML = "";
+// loadJobs redraws the list only when it changed, and puts keyboard focus back on the same button.
 async function loadJobs() {
+  const html = await jobsTable();
+  $("#add").hidden = false; // shown with the first list, so the list arriving does not push it down
+  if (html === jobsHTML) return;
+  jobsHTML = html;
+  const was = $("#jobs").contains(document.activeElement) ? document.activeElement : null;
+  $("#jobs").innerHTML = html;
+  if (was) ([...$("#jobs").querySelectorAll("button")].find((b) => b.dataset.copy === was.dataset.copy && b.dataset.del === was.dataset.del) || $('#add [name="id"]')).focus();
+}
+async function jobsTable() {
   let jobs;
   try {
     const r = await fetch("/api/jobs");
     if (!r.ok) throw new Error();
     jobs = await r.json();
   } catch (e) {
-    $("#jobs").innerHTML = `<div class="empty error" role="alert">${esc(unreachable)}</div>`;
-    return;
+    return `<div class="empty error" role="alert">${esc(unreachable)}</div>`;
   }
-  if (!jobs.length) {
-    $("#jobs").innerHTML = `<div class="empty">No jobs yet. Add the first one below.</div>`;
-    return;
-  }
-  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last success</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
+  if (!jobs.length) return `<div class="empty">No jobs yet. Add the first one below.</div>`;
+  return `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last success</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
       const cmd = `curl -fsS ${location.origin}${j.ping_path}/$?`;
       const due = j.due ? new Date(j.due) : null;
@@ -363,7 +374,7 @@ async function loadJobs() {
         <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)}<br>${esc(j.tz)}, ${Math.round(j.grace_seconds / 60)} min grace</div></td>
         <td data-label="Last success: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span>${j.last_fail ? `<div class="desc when" title="${esc(j.last_fail)}">failed ${esc(ago(j.last_fail))}</div>` : ""}</td>
         <td data-label="Ping expected by: ">${due ? `<span class="when" title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
-        <td><div class="actions"><button class="btn" type="button" data-copy="${esc(cmd)}" title="${esc(cmd)}" aria-label="Copy the ping command for ${esc(j.id)}">Copy ping</button><button class="btn danger" type="button" data-del="${esc(j.id)}" aria-label="Delete ${esc(j.id)}">Delete</button></div></td>
+        <td><div class="actions"><button class="btn" type="button" data-copy="${esc(cmd)}" title="${esc(cmd)}" aria-label="Copy ping for ${esc(j.id)}">Copy ping</button><button class="btn danger" type="button" data-del="${esc(j.id)}" aria-label="Delete ${esc(j.id)}">Delete</button></div></td>
       </tr>`;
     }).join("") + `</tbody></table>`;
 }
@@ -373,6 +384,7 @@ $("#jobs").addEventListener("click", async (e) => {
     try {
       await navigator.clipboard.writeText(c.dataset.copy);
       c.textContent = "Copied";
+      say(`Copied the ping command: ${c.dataset.copy}`); // the button's aria-label hides "Copied" from screen readers
       setTimeout(() => (c.textContent = "Copy ping"), 1500);
     } catch (err) {
       prompt("Copy this command:", c.dataset.copy);

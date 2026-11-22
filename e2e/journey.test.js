@@ -84,6 +84,7 @@ test("monitor: add a job, report a failure, then a success, delete it", async ()
   assert.equal(await text("#jobs tbody .state"), "Waiting");
   await page.click('button[data-copy]');
   assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^curl -fsS http:\/\/127\.0\.0\.1:\d+\/ping\/nightly-backup\/\$\?$/);
+  assert.match(await text("#msg"), /^Copied the ping command: curl -fsS /);
 
   // What "; curl -fsS .../ping/ID/$?" sends after a run that exited with status 2.
   assert.equal((await fetch(`${base}/ping/nightly-backup/2`)).status, 200);
@@ -100,10 +101,19 @@ test("monitor: add a job, report a failure, then a success, delete it", async ()
   assert.equal(await text("#jobs tbody .state"), "On time");
   assert.doesNotMatch(await text("#jobs tbody"), /failed/);
 
+  // The list redraws every 10 s; keyboard focus must stay on the same button.
+  await page.focus('button[data-del="nightly-backup"]');
+  assert.equal((await fetch(`${base}/ping/nightly-backup/1`)).status, 200);
+  await page.evaluate(() => loadJobs());
+  assert.equal(await text("#jobs tbody .state"), "Failed");
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.del), "nightly-backup");
+
+  // Deleting from the keyboard moves focus to the form, not to the top of the page.
   page.once("dialog", (d) => d.accept());
-  await page.click('button[data-del="nightly-backup"]');
+  await page.keyboard.press("Enter");
   await page.waitForSelector("#jobs .empty");
   assert.equal(await text("#msg"), "Deleted nightly-backup.");
+  assert.equal(await page.evaluate(() => document.activeElement.name), "id");
 });
 
 test("monitor: a bad schedule is refused with the parser's message", async () => {
