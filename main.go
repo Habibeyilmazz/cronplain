@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -28,6 +30,8 @@ const usage = `cronplain: understand, test and monitor scheduled jobs
 Usage:
   cronplain explain [flags] "EXPRESSION"   plain English, next runs, DST notes, lint
   cronplain audit [flags] FILE|-          check a whole crontab
+  cronplain import [flags] FILE|-         monitor every job of a crontab: register
+                                          them and print the crontab with pings added
   cronplain serve [flags]                 local web UI + heartbeat monitor
   cronplain version
 
@@ -47,6 +51,8 @@ func main() {
 		code, err = runExplain(os.Args[2:], stdout)
 	case "audit":
 		code, err = runAudit(os.Args[2:], os.Stdin, stdout)
+	case "import":
+		code, err = runImport(os.Args[2:], os.Stdin, os.Stdout, terminal{os.Stderr})
 	case "serve":
 		code, err = runServe(os.Args[2:], stdout)
 	case "version", "--version", "-v":
@@ -221,22 +227,9 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	r := stdin
-	if name := pos[0]; name != "-" {
-		f, err := os.Open(name)
-		if err != nil {
-			return 2, err
-		}
-		defer f.Close()
-		r = f
-	}
-	const maxSize = 4 << 20
-	data, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	data, err := readCrontab(pos[0], stdin)
 	if err != nil {
 		return 2, err
-	}
-	if len(data) > maxSize {
-		return 2, fmt.Errorf("%s is larger than 4 MiB; that is not a crontab", pos[0])
 	}
 	rep := audit.Run(string(data), audit.Options{System: *system, Location: loc, From: time.Now()})
 	if *asJSON {
@@ -250,6 +243,110 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	}
 	if rep.HasProblems() {
 		return 1, nil
+	}
+	return 0, nil
+}
+
+// readCrontab reads a file, or stdin for "-", refusing anything over 4 MiB.
+func readCrontab(name string, stdin io.Reader) ([]byte, error) {
+	r := stdin
+	if name != "-" {
+		f, err := os.Open(name)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		r = f
+	}
+	const maxSize = 4 << 20
+	data, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxSize {
+		return nil, fmt.Errorf("%s is larger than 4 MiB; that is not a crontab", name)
+	}
+	return data, nil
+}
+
+// pingBase is what "import" accepts for -url: it ends up unquoted in a crontab line,
+// so only characters that are inert in both cron (no %) and sh.
+var pingBase = regexp.MustCompile(`^https?://[A-Za-z0-9.\[\]:-]+(/[A-Za-z0-9._~/-]*)?$`)
+
+func runImport(args []string, stdin io.Reader, w, log io.Writer) (int, error) {
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	system := fs.Bool("system", false, "system crontab format (/etc/crontab, /etc/cron.d): a user field follows the schedule")
+	tz := fs.String("tz", "", "time zone cron runs the jobs in (default: CRON_TZ in the file, else local)")
+	db := fs.String("db", "cronplain.db", "the SQLite database \"cronplain serve -db\" uses")
+	base := fs.String("url", "http://127.0.0.1:4230", "address of cronplain serve, as the jobs will reach it")
+	grace := fs.Duration("grace", 5*time.Minute, "how long after a scheduled run a ping may arrive")
+	dry := fs.Bool("dry-run", false, "print the new crontab and the jobs, but do not register them")
+	fs.SetOutput(log)
+	pos, err := parseArgs(fs, args)
+	if err != nil {
+		return flagExit(err), nil
+	}
+	if len(pos) != 1 {
+		return 2, fmt.Errorf("import needs one crontab file (or - for stdin), e.g. crontab -l | cronplain import - > crontab.new")
+	}
+	*base = strings.TrimSuffix(*base, "/")
+	if !pingBase.MatchString(*base) {
+		return 2, fmt.Errorf("-url must be a plain http(s) address such as http://127.0.0.1:4230")
+	}
+	loc, err := loadZone(*tz)
+	if err != nil {
+		return 2, err
+	}
+	data, err := readCrontab(pos[0], stdin)
+	if err != nil {
+		return 2, err
+	}
+	out, found, notes := audit.AddPings(string(data), audit.Options{System: *system, Location: loc}, *base)
+	jobs := make([]monitor.Job, len(found))
+	for i, f := range found {
+		jobs[i] = monitor.Job{ID: f.ID, Schedule: f.Schedule, TZ: f.Zone, Grace: int(grace.Seconds()), CreatedAt: time.Now()}
+		if _, _, err := jobs[i].Validate(); err != nil {
+			if f.Zone == "Local" {
+				err = fmt.Errorf("cannot tell this machine's time zone by name; pass -tz with the zone cron runs in, such as -tz Europe/Istanbul")
+			}
+			return 2, fmt.Errorf("line %d: %w", f.Line, err)
+		}
+	}
+	state := make([]string, len(found))
+	where := "dry run, nothing registered"
+	if !*dry {
+		store, err := monitor.OpenStore(*db)
+		if err != nil {
+			return 2, err
+		}
+		defer store.Close()
+		for i := range jobs {
+			existed, err := store.Upsert(jobs[i])
+			if err != nil {
+				return 2, err
+			}
+			state[i] = map[bool]string{false: "added", true: "updated"}[existed]
+		}
+		where = "database " + *db
+		if abs, err := filepath.Abs(*db); err == nil {
+			where = "database " + abs
+		}
+	}
+	if _, err := io.WriteString(w, out); err != nil {
+		return 2, err
+	}
+	fmt.Fprintf(log, "%d job(s) to monitor (%s, grace %s):\n", len(found), where, grace)
+	for i, f := range found {
+		if f.Existing {
+			state[i] = strings.TrimPrefix(state[i]+", line already pings it", ", ")
+		}
+		fmt.Fprintf(log, "  line %-4d %-20s %-14s %s  %s\n", f.Line, f.ID, f.Schedule, f.Zone, state[i])
+	}
+	for _, n := range notes {
+		fmt.Fprintf(log, "  line %-4d %-5s %s\n", n.Line, n.Level, n.Message)
+	}
+	if !*dry && len(found) > 0 {
+		fmt.Fprintf(log, "Install the printed crontab (crontab FILE) and keep \"cronplain serve -db %s\" running.\n", *db)
 	}
 	return 0, nil
 }

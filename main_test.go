@@ -3,8 +3,12 @@ package main
 import (
 	"flag"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Habibeyilmazz/cronplain/internal/monitor"
 )
 
 func TestExplainCommand(t *testing.T) {
@@ -111,5 +115,44 @@ func TestTerminalWriterEscapesControls(t *testing.T) {
 	}
 	if want := `line 2` + "\t" + `error \x1b[2J\x1b]0;pwn\a \x9b31m \u009b é ✓\r` + "\n"; b.String() != want {
 		t.Errorf("got  %q\nwant %q", b.String(), want)
+	}
+}
+
+func TestImportCommand(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "jobs.db")
+	crontab := "CRON_TZ=Europe/Istanbul\n0 3 * * * /opt/bin/backup >> /var/log/b.log 2>&1\n@reboot /opt/bin/warm\n"
+	var out, log strings.Builder
+	// A dry run prints the result but creates no database.
+	if code, err := runImport([]string{"-dry-run", "-db", db, "-"}, strings.NewReader(crontab), &out, &log); code != 0 || err != nil {
+		t.Fatalf("dry run: code %d err %v\n%s", code, err, log.String())
+	}
+	if _, err := os.Stat(db); !os.IsNotExist(err) {
+		t.Errorf("dry run created the database: %v", err)
+	}
+	want := "CRON_TZ=Europe/Istanbul\n0 3 * * * /opt/bin/backup >> /var/log/b.log 2>&1; curl -fsS http://127.0.0.1:4231/ping/backup/$?\n@reboot /opt/bin/warm\n"
+	out.Reset()
+	if code, err := runImport([]string{"-db", db, "-url", "http://127.0.0.1:4231/", "-grace", "2m", "-"}, strings.NewReader(crontab), &out, &log); code != 0 || err != nil || out.String() != want {
+		t.Fatalf("import: code %d err %v\n%s\nlog:\n%s", code, err, out.String(), log.String())
+	}
+	store, err := monitor.OpenStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := store.List()
+	store.Close()
+	if err != nil || len(jobs) != 1 || jobs[0].ID != "backup" || jobs[0].Schedule != "0 3 * * *" || jobs[0].TZ != "Europe/Istanbul" || jobs[0].Grace != 120 {
+		t.Fatalf("stored jobs: %+v, %v", jobs, err)
+	}
+	// Importing the new crontab again leaves it as it is and updates the job.
+	log.Reset()
+	out.Reset()
+	if code, _ := runImport([]string{"-db", db, "-url", "http://127.0.0.1:4231", "-"}, strings.NewReader(want), &out, &log); code != 0 || out.String() != want ||
+		!strings.Contains(log.String(), "updated, line already pings it") || !strings.Contains(log.String(), "@reboot has no calendar times") {
+		t.Errorf("re-import: code %d\n%s\nlog:\n%s", code, out.String(), log.String())
+	}
+	for _, args := range [][]string{{}, {"a", "b"}, {"-url", "http://x/$(id)", "-"}, {"-url", "ftp://x", "-"}, {"-grace", "-1m", "-"}, {"-tz", "Mars/Base", "-"}, {"does-not-exist"}} {
+		if code, _ := runImport(args, strings.NewReader(crontab), io.Discard, io.Discard); code != 2 {
+			t.Errorf("%q: exit %d, want 2", args, code)
+		}
 	}
 }
