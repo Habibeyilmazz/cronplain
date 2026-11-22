@@ -1,0 +1,21 @@
+# A deliberately messy crontab for trying "cronplain audit".
+MAILTO=ops@example.com
+
+# nightly jobs
+0 0 * * *   /opt/app/bin/backup-db >> /var/log/backup.log 2>&1
+0 0 * * *   /opt/app/bin/rotate-logs > /var/log/rotate.log
+0 0 * * *   pg_dump app | gzip > /srv/dumps/app-$(date +%F).sql.gz
+30 2 * * *  /opt/app/bin/report
+
+# every few minutes
+*/2 * * * * /opt/app/bin/poll-queue >> /var/log/poll.log 2>&1
+*/5 * * * * flock -n /tmp/sync.lock /opt/app/bin/sync >> /var/log/sync.log 2>&1
+
+# monthly invoice run: meant to be "the first Monday"
+0 9 1-7 * 1 /opt/app/bin/invoices >> /var/log/invoices.log 2>&1
+
+# never fires
+0 12 30 2 * /opt/app/bin/leap-cleanup >> /var/log/cleanup.log 2>&1
+
+@reboot     /opt/app/bin/warm-cache >> /var/log/warm.log 2>&1
+0 0 * * *   /opt/app/bin/backup-db >> /var/log/backup.log 2>&1
