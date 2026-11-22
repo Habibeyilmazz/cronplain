@@ -47,7 +47,7 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 		}
 	}
 	if s.domOrDow {
-		warn("Both day-of-month and day-of-week are restricted, so cron runs when EITHER matches (Vixie cron rule), not only when both do. To get 'Friday the 13th', keep one field and test the other in the command, e.g. [ \"$(date +%%d)\" = 13 ].")
+		warn("Both day-of-month and day-of-week are restricted, so cron runs when EITHER matches (Vixie cron rule), not only when both do. To require both (say, Friday the 13th), keep one field and test the other in the command, e.g. [ \"$(date +\\%%d)\" = 13 ] && ... (inside a crontab %% must be written \\%%).")
 	}
 	gap := s.MinInterval(from)
 	if gap > 0 && gap <= time.Minute {

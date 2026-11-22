@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 	_ "time/tzdata" // IANA zones work even on machines without a zoneinfo database
@@ -44,6 +45,9 @@ func main() {
 	case "serve":
 		err = runServe(os.Args[2:])
 	case "version", "--version", "-v":
+		if bi, ok := debug.ReadBuildInfo(); ok && version == "dev" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+			version = bi.Main.Version // go install ...@latest stamps the module version
+		}
 		fmt.Println("cronplain", version)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
@@ -62,7 +66,7 @@ func main() {
 
 func loadZone(name string) (*time.Location, error) {
 	if name == "" || strings.EqualFold(name, "local") {
-		return time.Local, nil
+		return localZone(), nil
 	}
 	loc, err := time.LoadLocation(name)
 	if err != nil {
@@ -71,16 +75,58 @@ func loadZone(name string) (*time.Location, error) {
 	return loc, nil
 }
 
+// localZone is time.Local under its IANA name (from TZ or the /etc/localtime link),
+// so output says "Europe/Istanbul" rather than "Local".
+func localZone() *time.Location {
+	name := os.Getenv("TZ")
+	if name == "" {
+		if p, err := os.Readlink("/etc/localtime"); err == nil {
+			_, name, _ = strings.Cut(p, "zoneinfo/")
+		}
+	}
+	if loc, err := time.LoadLocation(name); err == nil && name != "" {
+		return loc
+	}
+	return time.Local
+}
+
+// parseArgs lets flags come before or after the positional arguments
+// ("audit FILE -system"). An argument containing a space is never a flag, so a
+// pasted "- cron: '0 9 * * 1'" line stays an expression; "--" ends the flags.
+func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
+	var pos []string
+	for len(args) > 0 {
+		a := args[0]
+		if a == "--" {
+			return append(pos, args[1:]...), nil
+		}
+		if a == "-" || !strings.HasPrefix(a, "-") || strings.ContainsAny(a, " \t") {
+			pos, args = append(pos, a), args[1:]
+			continue
+		}
+		end := 1
+		for end < len(args) && args[end] != "--" && !strings.ContainsAny(args[end], " \t") {
+			end++
+		}
+		if err := fs.Parse(args[:end]); err != nil {
+			return nil, err
+		}
+		args = append(fs.Args(), args[end:]...)
+	}
+	return pos, nil
+}
+
 func runExplain(args []string, w io.Writer) (int, error) {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	tz := fs.String("tz", "", "IANA time zone to evaluate and show times in (default: local)")
 	n := fs.Int("n", 20, "number of upcoming runs to list (1-500)")
 	dialect := fs.String("dialect", "auto", "auto, cron, cron-seconds, quartz, github-actions or systemd")
 	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil {
+	pos, err := parseArgs(fs, args)
+	if err != nil {
 		return 2, nil
 	}
-	if fs.NArg() == 0 {
+	if len(pos) == 0 {
 		return 2, fmt.Errorf("explain needs an expression, e.g. cronplain explain \"30 2 * * *\"")
 	}
 	if *n < 1 || *n > 500 {
@@ -94,7 +140,7 @@ func runExplain(args []string, w io.Writer) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	e, err := sched.Explain(strings.Join(fs.Args(), " "), d, loc, *n, time.Now())
+	e, err := sched.Explain(strings.Join(pos, " "), d, loc, *n, time.Now())
 	if err != nil {
 		return 2, err
 	}
@@ -138,10 +184,11 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	system := fs.Bool("system", false, "system crontab format (/etc/crontab, /etc/cron.d): a user field follows the schedule")
 	tz := fs.String("tz", "", "time zone for collision analysis (default: CRON_TZ in the file, else local)")
 	asJSON := fs.Bool("json", false, "print JSON")
-	if err := fs.Parse(args); err != nil {
+	pos, err := parseArgs(fs, args)
+	if err != nil {
 		return 2, nil
 	}
-	if fs.NArg() != 1 {
+	if len(pos) != 1 {
 		return 2, fmt.Errorf("audit needs one file (or - for stdin)")
 	}
 	loc, err := loadZone(*tz)
@@ -149,7 +196,7 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 		return 2, err
 	}
 	r := stdin
-	if name := fs.Arg(0); name != "-" {
+	if name := pos[0]; name != "-" {
 		f, err := os.Open(name)
 		if err != nil {
 			return 2, err
@@ -188,6 +235,9 @@ func runServe(args []string) error {
 	fs.DurationVar(&cfg.Every, "check-every", 30*time.Second, "how often to check for late jobs")
 	if err := fs.Parse(args); err != nil {
 		return nil
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("serve takes no arguments, got %q", fs.Args())
 	}
 	return monitor.Serve(cfg, os.Stdout)
 }

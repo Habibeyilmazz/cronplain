@@ -268,7 +268,7 @@ func TestLints(t *testing.T) {
 		not     []string // substrings that must not appear
 	}{
 		{"* * * * *", Cron, []string{"Runs every 1m (1440 times a day)"}, nil},
-		{"0 0 13 * 5", Cron, []string{"EITHER matches"}, nil},
+		{"0 0 13 * 5", Cron, []string{"EITHER matches", `date +\%d`}, nil},
 		{"0 0 */2 * 5", Cron, nil, []string{"EITHER"}},
 		{"0 0 30 2 *", Cron, []string{"never fires", "Day 30 never occurs in February"}, nil},
 		{"0 0 31 * *", Cron, []string{"Skips months without that day: February, April, June, September and November"}, nil},

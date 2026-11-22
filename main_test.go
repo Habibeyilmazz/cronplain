@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,37 @@ func TestExplainCommand(t *testing.T) {
 		if code, _ := runExplain(args, &b); code != 2 {
 			t.Errorf("%q: exit %d, want 2", args, code)
 		}
+	}
+}
+
+func TestParseArgs(t *testing.T) {
+	cases := []struct {
+		args    []string
+		pos, tz string
+	}{
+		{[]string{"-tz", "UTC", "0 9 * * *"}, "0 9 * * *", "UTC"},
+		{[]string{"0 9 * * *", "-tz", "UTC"}, "0 9 * * *", "UTC"},
+		{[]string{"- cron: '0 9 * * 1'", "--tz=UTC"}, "- cron: '0 9 * * 1'", "UTC"},
+		{[]string{"/etc/crontab", "-system"}, "/etc/crontab", ""},
+		{[]string{"-", "-tz", "UTC"}, "-", "UTC"},
+		{[]string{"0", "9", "*", "*", "1"}, "0 9 * * 1", ""},
+		{[]string{"--", "-tz"}, "-tz", ""},
+	}
+	for _, c := range cases {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		tz := fs.String("tz", "", "")
+		fs.Bool("system", false, "")
+		pos, err := parseArgs(fs, c.args)
+		if err != nil || strings.Join(pos, " ") != c.pos || *tz != c.tz {
+			t.Errorf("%q: pos %q tz %q err %v, want %q %q", c.args, pos, *tz, err, c.pos, c.tz)
+		}
+	}
+}
+
+func TestLocalZoneName(t *testing.T) {
+	t.Setenv("TZ", "America/New_York")
+	if loc, _ := loadZone(""); loc.String() != "America/New_York" {
+		t.Errorf("local zone = %s", loc)
 	}
 }
 
