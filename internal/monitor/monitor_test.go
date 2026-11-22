@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,6 +140,34 @@ func TestAlertFailureHidesSecretURL(t *testing.T) {
 	a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
 	if s := out.String(); strings.Contains(s, "SECRET-PATH") || strings.Contains(s, "secret-topic") || strings.Count(s, "delivery to") != 2 {
 		t.Errorf("log leaks the alert URL or misses a failure:\n%s", s)
+	}
+}
+
+// A webhook that redirects is not followed: on 301/302 Go would resend the POST as
+// a bodiless GET that can answer 200 (the alert silently lost), and on 307/308 it
+// would send the alert body to wherever the Location header points.
+func TestAlertDoesNotFollowRedirects(t *testing.T) {
+	for _, code := range []int{http.StatusFound, http.StatusTemporaryRedirect} {
+		var followed atomic.Bool
+		target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { followed.Store(true) }))
+		defer target.Close()
+		hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL+"/elsewhere", code)
+		}))
+		defer hook.Close()
+		var out bytes.Buffer
+		a, err := NewAlerter(&out, hook.URL+"/SECRET-PATH", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.RetryDelays = nil
+		a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
+		if followed.Load() {
+			t.Errorf("HTTP %d: the redirect was followed", code)
+		}
+		if s := out.String(); !strings.Contains(s, fmt.Sprintf("HTTP %d", code)) || !strings.Contains(s, "redirect") || strings.Contains(s, "elsewhere") || strings.Contains(s, "SECRET-PATH") {
+			t.Errorf("HTTP %d: log should name the redirect without its target:\n%s", code, s)
+		}
 	}
 }
 

@@ -45,7 +45,9 @@ var topicPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // NewAlerter validates the user's alert settings.
 func NewAlerter(out io.Writer, webhook, ntfyServer, topic string) (*Alerter, error) {
-	a := &Alerter{Out: out, Client: &http.Client{Timeout: 10 * time.Second},
+	// Redirects are not followed: 301/302 would turn the POST into a bodiless GET, 307/308 would hand the alert to another host.
+	noRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	a := &Alerter{Out: out, Client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: noRedirect},
 		RetryDelays: []time.Duration{30 * time.Second, 2 * time.Minute, 10 * time.Minute}, stop: make(chan struct{})}
 	if webhook != "" {
 		if err := httpURL(webhook); err != nil {
@@ -164,7 +166,11 @@ func (a *Alerter) attempt(target, ctype string, body []byte, headers map[string]
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		fmt.Fprintf(a.Out, "alert delivery to %s failed: HTTP %d\n", req.URL.Host, resp.StatusCode)
+		hint := ""
+		if resp.StatusCode < 400 {
+			hint = " (a redirect, not followed: use the URL it points to)"
+		}
+		fmt.Fprintf(a.Out, "alert delivery to %s failed: HTTP %d%s\n", req.URL.Host, resp.StatusCode, hint)
 		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
 	}
 	return false
