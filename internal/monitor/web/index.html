@@ -203,7 +203,7 @@ form.add input { width: 100%; }
     <h2 class="sr">Jobs</h2>
     <div id="jobs"></div>
     <form class="add" id="add" hidden>
-      <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="nightly-backup"></label>
+      <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" title="Lowercase letters, digits, - and _ (it becomes part of the ping URL)" placeholder="nightly-backup"></label>
       <label>Schedule <input name="schedule" required placeholder="0 3 * * *" spellcheck="false"></label>
       <label>Time zone <input name="tz" list="zones" required></label>
       <label>Grace (min) <input name="grace" type="number" min="0" max="10080" value="5" required></label>
