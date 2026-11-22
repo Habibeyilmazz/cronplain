@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (launch round 14)
+- On macOS a wrong-case zone such as `europe/istanbul` was accepted everywhere (`-tz`, `CRON_TZ=`, a systemd zone suffix, monitor jobs), because the zoneinfo directory there is case-insensitive; Linux and cron on it reject the name, so `audit` passed a crontab on a Mac that would misbehave on the server. One `sched.LoadZone` now requires the exact case on every system (a zone Go takes from its embedded copy because the system database lacks it still loads). `TestLoadZoneCase` fails on macOS without the fix and also checks the logic against a fake case-insensitive directory, so it means something on Linux CI too.
+
+### Added (launch round 14)
+- `cronplain explain` prints the expression with `^^` under the field an error names (`0 9 32 * *`: under `32`), as the web page already marked it. Only when the field layout is certain: five fields, six or seven seconds-first, `cron(...)`, or a chosen dialect with its field count; not for systemd or a pasted YAML line.
+- A pull request template.
+
+### Notes for the next person (round 14)
+- Checked by running: `go install github.com/Habibeyilmazz/cronplain@latest` into a scratch `GOBIN` works (the proxy served a pseudo-version of a slightly older commit, as `@latest` does without tags); the README's explain, audit and import samples match the real output; the e2e test passes (4/4). README, CONTRIBUTING, SECURITY, issue forms, hero image, screenshots, GIF, repo description and topics were already in place and accurate, so they were only touched for the two changes above.
+- The repo's private vulnerability reporting is off (`gh api .../private-vulnerability-reporting`); SECURITY.md already covers both cases. Turning it on is a repo setting for the owner. GitHub's community profile shows "issue template: false" although the issue forms work; that check ignores `.yml` forms.
+- Reported gaps re-checked: a retry that fails at shutdown too is still lost (documented `shortcut:`), no TypeScript explainer (the page uses `/api/explain`; see the roadmap), AWS `L-n`/`LW` unverified (no AWS account). The CLI caret and the macOS zone case are done.
+
 ### Fixed (reliability round 13; each reproduced first, then a failing test, then the fix)
 - `serve` answered some pings with HTTP 500 ("database is locked") while `cronplain import` wrote to the same database: 15 of 400 parallel pings were lost. A ping reads the job and then updates it; in a deferred transaction SQLite refuses the upgrade to a write lock at once (`SQLITE_BUSY`, 517) instead of waiting the busy timeout. Transactions now start `IMMEDIATE`; 2 x 400 pings during an import of 300 jobs, all 200.
 - A failure (or "recovered") alert from a ping that arrived just before `serve` stopped was lost when the webhook was slow: those alerts are sent in the background, and shutdown only waited for alerts queued for a retry. `serve` now waits for the HTTP server to finish and for those sends (checked with the real binary and a webhook that takes 1.5 s: the old binary delivered nothing).

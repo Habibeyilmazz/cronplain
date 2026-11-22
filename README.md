@@ -77,7 +77,16 @@ The same in the web UI (`cronplain serve`, Explain tab):
   Not supported yet: systemd fractional seconds, Quartz `L-nW`, wrap-around ranges such as `FRI-MON` in crontab syntax. Each one is rejected with a message rather than guessed.
   Quartz extensions in a 5-field crontab are rejected with an explanation, because Vixie cron, cronie and GitHub Actions do not accept them.
 
-- **Next runs in any IANA zone** (`-tz`, default: the machine's zone), up to 500, as text or `-json`.
+- **Next runs in any IANA zone** (`-tz`, default: the machine's zone), up to 500, as text or `-json`. Zone names are case-sensitive on every system, as on Linux (`europe/istanbul` is refused on a Mac too).
+- **Errors point at the field**, in the terminal and on the web page, when the field layout is certain:
+
+  ```text
+  $ cronplain explain "0 9 32 * *"
+  cronplain: day-of-month: 32 is out of range 1-31
+    0 9 32 * *
+        ^^
+  ```
+
 - **DST is computed, not assumed.** Runs are wall-clock matches: a time inside a spring-forward gap does not fire and a time inside a fall-back overlap fires twice and is marked. Each clock change in the window says which scheduled times it skips or repeats, and for crontab syntax how Vixie cron and cronie handle it differently.
 - **Lint notes**, for example:
   - day-of-month and day-of-week both set means *either* matches in Vixie cron (`0 9 1-7 * 1` is not "the first Monday");
