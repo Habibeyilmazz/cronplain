@@ -100,7 +100,7 @@ $ cronplain audit examples/crontab.sample
   ...
 ```
 
-Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`; `2>/dev/null` or `2>&1` alone still mails stdout), a part of a `;` or `&&` list left unredirected (`a > log; b` mails b's output; a part after `||` counts as a deliberate failure mail), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
+Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`; `2>/dev/null` or `2>&1` alone still mails stdout), a part of a `;` or `&&` list left unredirected (`a > log; b` mails b's output; a part after `||` counts as a deliberate failure mail), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, lines copied between `/etc/crontab` and a user crontab (`root` as the command, or no user field with `-system`), a `TZ=` line (it does not change when cron runs the jobs; cronie reads `CRON_TZ=`), and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
 Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user field after the schedule; one file per run), `-` to read stdin, `-json` for machines. The exit code is 1 when there is any warning or error, so it can gate CI.
 
 ### Heartbeat monitor
@@ -145,7 +145,7 @@ $ crontab crontab.new
 
 - Each job is named after the program it runs (`flock -n x.lock python3 /opt/sync.py` is `sync`; a second `backup-db` becomes `backup-db-2`), in the zone cron runs it in (`CRON_TZ=` in the file, else `-tz`, else the machine's zone; a `TZ=` line only sets the zone the commands see, so it is not used), with the grace from `-grace` (default 5 minutes).
 - A line that already pings the `-url` address keeps its job name and is left unchanged, so running `import` again on the installed crontab only updates schedules. `-dry-run` shows the result without touching the database; to pick other names, edit the ping URLs in the dry run's output and import that file (names already registered stay until you delete them on the dashboard).
-- Left alone, with a note: `@reboot`, invalid schedules, and commands where an added `; curl ...` would not run or would never see the exit status (an unescaped `%`, a trailing `&`, a trailing `# comment`, `exec` or `exit`).
+- Left alone, with a note: `@reboot`, invalid schedules, and commands where an added `; curl ...` would not run or would never see the exit status (an unescaped `%`, a trailing `&`, a trailing `# comment` or `\`, `exec` or `exit`, or a last command that already reports `$?`, such as a ping to an older `-url`: edit that address by hand).
 - The ping reports `$?`, the exit status of the last command that ran on the line: for `a; b` and `a | b` that is `b`'s, and for `a || echo failed` it is `echo`'s (`a && b` is right either way). `import` notes the lines with `|` or `||`.
 - `-system` reads `/etc/crontab` and `/etc/cron.d/` files; `-url` sets the address the jobs ping if `serve` does not listen on the default `http://127.0.0.1:4230`.
 
