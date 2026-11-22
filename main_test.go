@@ -13,7 +13,7 @@ func TestExplainCommand(t *testing.T) {
 		t.Fatalf("code %d, err %v", code, err)
 	}
 	out := b.String()
-	for _, want := range []string{"[cron, evaluated in Europe/Istanbul]", "At 09:00 on Monday through Friday.", "Next 3 runs", "+03 (+03:00)"} {
+	for _, want := range []string{"[cron, evaluated in Europe/Istanbul]", "At 09:00 on Monday through Friday.", "Next 3 runs", "09:00 +03:00\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}

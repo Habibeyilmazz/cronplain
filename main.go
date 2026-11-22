@@ -162,7 +162,11 @@ func printExplanation(w io.Writer, e *sched.Explanation) {
 			if r.Repeated {
 				mark = "  <- repeated wall time (DST ends)"
 			}
-			fmt.Fprintf(w, "  %2d  %s %s (%s)%s\n", i+1, r.Local, r.Abbrev, r.Offset, mark)
+			zone := r.Abbrev + " (" + r.Offset + ")"
+			if strings.HasPrefix(r.Abbrev, "+") || strings.HasPrefix(r.Abbrev, "-") {
+				zone = r.Offset // the zone has no name (Istanbul: "+03"), so do not print the offset twice
+			}
+			fmt.Fprintf(w, "  %2d  %s %s%s\n", i+1, r.Local, zone, mark)
 		}
 	}
 	if len(e.DST) > 0 {
