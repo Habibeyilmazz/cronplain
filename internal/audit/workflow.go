@@ -12,7 +12,8 @@ var (
 	// workflowText matches a "- cron:" line or a top-level on:/jobs: key; crontab lines can be neither.
 	workflowText = regexp.MustCompile(`(?m)^\s*(-\s*)?cron:|^["']?(on|jobs)["']?\s*:`)
 	cronItem     = regexp.MustCompile(`^\s*(-\s*)?cron:\s*`)
-	flowCron     = regexp.MustCompile(`[{,]\s*cron:`) // schedule: [{cron: '...'}]
+	flowCron     = regexp.MustCompile(`[{,]\s*cron:`)                    // schedule: [{cron: '...'}]
+	flowEntry    = regexp.MustCompile(`^\s*-\s*\{[^{}]*\bcron:[^{}]*\}`) // - {cron: '...', timezone: ...}
 	yamlComment  = regexp.MustCompile(`\s+#.*$`)
 	tzKey        = regexp.MustCompile(`^\s*(-\s*)?timezone:`)
 )
@@ -29,17 +30,23 @@ func runWorkflow(text string, from time.Time, r *Report, add func(int, string, s
 	for i, line := range lines {
 		n := i + 1
 		m := cronItem.FindString(line)
-		if m == "" {
+		var entry string
+		switch {
+		case m != "":
+			entry = line + "\n" + entryZone(lines, i)
+		case flowEntry.MatchString(line):
+			entry = yamlComment.ReplaceAllString(line, "")
+		default:
 			if flowCron.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "#") {
 				add(n, "info", "not checked: cronplain reads schedules written one per line as - cron: '...'")
 			}
 			continue
 		}
-		if strings.HasPrefix(line[len(m):], "*") {
+		if m != "" && strings.HasPrefix(line[len(m):], "*") {
 			add(n, "error", "the schedule starts with * but is not quoted: YAML reads *... as an alias, so GitHub rejects the workflow; quote it: - cron: '%s'", yamlComment.ReplaceAllString(strings.TrimSpace(line[len(m):]), ""))
 			continue
 		}
-		s, err := sched.Parse(line+"\n"+entryZone(lines, i), sched.GitHubActions)
+		s, err := sched.Parse(entry, sched.GitHubActions)
 		if err != nil {
 			add(n, "error", "%v", err)
 			continue
@@ -65,7 +72,7 @@ func runWorkflow(text string, from time.Time, r *Report, add func(int, string, s
 func entryZone(lines []string, i int) string {
 	start, col := i, indent(lines[i])
 	if t := strings.TrimSpace(lines[i]); !strings.HasPrefix(t, "-") {
-		for j := i - 1; j >= 0; j-- { // cron: is not the first key: find the entry's "- "
+		for j := i - 1; j >= max(0, i-entryLines); j-- { // cron: is not the first key: find the entry's "- "
 			if t := strings.TrimSpace(lines[j]); t != "" && !strings.HasPrefix(t, "#") && indent(lines[j]) < col {
 				if strings.HasPrefix(t, "-") {
 					start, col = j, indent(lines[j])
@@ -74,7 +81,7 @@ func entryZone(lines []string, i int) string {
 			}
 		}
 	}
-	for j := start; j < len(lines); j++ {
+	for j := start; j < min(len(lines), start+entryLines); j++ {
 		t := strings.TrimSpace(lines[j])
 		if j > start && t != "" && !strings.HasPrefix(t, "#") && indent(lines[j]) <= col {
 			break
@@ -85,5 +92,9 @@ func entryZone(lines []string, i int) string {
 	}
 	return ""
 }
+
+// entryLines bounds the search for an entry's keys, so a huge file stays linear.
+// shortcut: a timezone: more than 20 lines from its cron: (comments between) is not seen; raise it if that happens.
+const entryLines = 20
 
 func indent(line string) int { return len(line) - len(strings.TrimLeft(line, " \t")) }

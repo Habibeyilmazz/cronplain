@@ -134,6 +134,7 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	// A pasted workflow snippet ("on:\n  schedule:\n    - cron: '0 9 * * 1'"): use its one cron: line
 	// and the timezone: GitHub Actions reads beside it.
 	var ghZone *time.Location
+	zone, hasZone := "", false // timezone: of a GitHub Actions entry
 	if strings.ContainsAny(text, "\r\n") {
 		lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' })
 		var crons, zones []string
@@ -145,15 +146,11 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 				zones = append(zones, strings.Trim(strings.TrimSpace(yamlComment.Split(m[2], 2)[0]), `'"`))
 			}
 		}
-		switch {
-		case len(zones) > 1:
+		if len(zones) > 1 {
 			return nil, fmt.Errorf("%d timezone: lines: give one schedule entry", len(zones))
-		case len(zones) == 1 && len(crons) == 1:
-			loc, err := LoadZone(zones[0])
-			if err != nil || zones[0] == "" || strings.EqualFold(zones[0], "local") {
-				return nil, fmt.Errorf("unknown time zone %q in timezone: (use an IANA name such as Europe/Istanbul)", zones[0])
-			}
-			ghZone = loc
+		}
+		if len(zones) == 1 {
+			zone, hasZone = zones[0], true
 		}
 		switch len(crons) {
 		case 0:
@@ -163,6 +160,32 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 		default:
 			return nil, fmt.Errorf("%d cron: lines: explain them one at a time, or check them all with cronplain audit WORKFLOW.yml", len(crons))
 		}
+	}
+	// One entry as a YAML flow mapping: "- {cron: '0 9 * * 1', timezone: Europe/Istanbul}"
+	// (the web page writes a pasted multi-line entry this way, since its field holds one line).
+	if t := strings.TrimSpace(strings.TrimPrefix(text, "-")); strings.HasPrefix(t, "{") && strings.HasSuffix(t, "}") {
+		text = ""
+		for _, kv := range splitFlow(t[1 : len(t)-1]) {
+			k, v, _ := strings.Cut(kv, ":")
+			switch v = strings.TrimSpace(v); strings.TrimSpace(k) {
+			case "cron":
+				text = "cron: " + v
+			case "timezone":
+				zone, hasZone = strings.Trim(v, `'"`), true
+			default:
+				return nil, fmt.Errorf("unexpected %q in a schedule entry: give cron: and optionally timezone:", strings.TrimSpace(kv))
+			}
+		}
+		if text == "" {
+			return nil, fmt.Errorf("no cron: in the schedule entry")
+		}
+	}
+	if hasZone {
+		loc, err := LoadZone(zone)
+		if err != nil || zone == "" || strings.EqualFold(zone, "local") {
+			return nil, fmt.Errorf("unknown time zone %q in timezone: (use an IANA name such as Europe/Istanbul)", zone)
+		}
+		ghZone = loc
 	}
 	// GitHub Actions YAML: "- cron: '0 9 * * 1'"
 	if t := strings.TrimSpace(strings.TrimPrefix(text, "-")); strings.HasPrefix(t, "cron:") {
@@ -637,4 +660,25 @@ func parseField(t string, sp spec) (field, error) {
 		}
 	}
 	return f, nil
+}
+
+// splitFlow splits the inside of a YAML flow mapping at commas outside quotes.
+func splitFlow(s string) []string {
+	var out []string
+	var quote rune
+	start := 0
+	for i, r := range s {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ',':
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, s[start:])
 }

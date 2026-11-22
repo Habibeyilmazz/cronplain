@@ -31,6 +31,8 @@ func TestWorkflow(t *testing.T) {
 			[]string{"line 4   info  0 0 * * * is already listed on line 3", "3 schedule(s)"}, []string{"line 5   info  30 6 * * *: GitHub Actions evaluates"}},
 		{"flow style is not read", "on:\n  schedule: [{cron: '0 0 * * *'}]\njobs:\n  x:\n    steps:\n      - run: echo \"cron: x\"\n",
 			[]string{"line 2   info  not checked"}, []string{"line 6"}},
+		{"one-line entries", "on:\n  schedule:\n    - {cron: '0,30 2 * * 0', timezone: Asia/Tokyo} # Tokyo\n    - {cron: '61 * * * *'}\n",
+			[]string{"line 3   info  0,30 2 * * 0: Evaluated in Asia/Tokyo", "line 4   error minute: 61", "1 schedule(s)"}, []string{"not checked"}},
 		{"commented out", "on:\n  schedule:\n    # - cron: '* * * * *'\n    - cron: '5 4 * * 0'\n",
 			[]string{"1 schedule(s)"}, []string{"line 3"}},
 	}

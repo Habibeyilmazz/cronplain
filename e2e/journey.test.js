@@ -76,6 +76,14 @@ test("explain: pasting a workflow snippet keeps its cron: line", async () => {
   await page.waitForFunction(() => document.querySelector("#sentence").textContent.includes("06:17"));
   assert.equal(await page.inputValue("#expr"), "- cron: '17 6 * * 1'  # Mondays");
   assert.equal(await text("#sentence"), "At 06:17 on Monday (UTC time).");
+  // with a timezone: key the entry becomes one line that keeps the zone
+  await page.evaluate(() => navigator.clipboard.writeText("    - cron: '30 5 * * 1' # early\n      timezone: \"America/New_York\"\n"));
+  await page.fill("#expr", "");
+  await page.focus("#expr");
+  await page.keyboard.press("ControlOrMeta+V");
+  await page.waitForFunction(() => document.querySelector("#sentence").textContent.includes("05:30"));
+  assert.equal(await page.inputValue("#expr"), `{cron: '30 5 * * 1', timezone: "America/New_York"}`);
+  assert.equal(await text("#sentence"), "At 05:30 on Monday (America/New_York time).");
 });
 
 test("monitor: add a job, report a failure, then a success, delete it", async () => {

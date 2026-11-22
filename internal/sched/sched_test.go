@@ -87,6 +87,9 @@ func TestParseErrors(t *testing.T) {
 		{"0 9 * * 1\n0 10 * * 1", Auto, "2 lines: give one schedule"},
 		{"- cron: '0 9 * * 1'\n  timezone: Mars/Base", Auto, `unknown time zone "Mars/Base" in timezone:`},
 		{"- cron: '0 9 * * 1'\n  timezone: local", Auto, "unknown time zone"},
+		{"{cron: '0 9 * * 1', timezone: }", Auto, `unknown time zone ""`},
+		{"{cron: '0 9 * * 1', branch: main}", Auto, `unexpected "branch: main"`},
+		{"{timezone: UTC}", Auto, "no cron:"},
 		{"- cron: '0 9 * * 1'\n  timezone: UTC\n  timezone: Europe/Istanbul", Auto, "2 timezone: lines"},
 		{"61 * * * *", Auto, "61 is out of range 0-59"},
 		{"* * * *", Auto, "have 5 fields, got 4"},
@@ -284,6 +287,8 @@ func TestNext(t *testing.T) {
 		{"GitHub Actions timezone: beside cron:", "- cron: '30 5 * * 1'\n  timezone: \"Europe/Istanbul\" # TR", "UTC", "2026-11-22T00:00:00Z",
 			[]string{"2026-11-23T05:30:00+03:00"}},
 		// GitHub runs a time skipped by spring-forward at the next valid time (its docs: 2:30 AM runs at 3:00 AM), once
+		{"GitHub Actions one-line entry", "- {cron: '30 5 * * 1', timezone: 'Europe/Istanbul'}", "UTC", "2026-11-22T00:00:00Z",
+			[]string{"2026-11-23T05:30:00+03:00"}},
 		{"GitHub Actions DST gap moves to the jump", "- cron: '0,30 2 * * *'\n  timezone: America/New_York", "UTC", "2027-03-13T12:00:00Z",
 			[]string{"2027-03-14T03:00:00-04:00", "2027-03-15T02:00:00-04:00", "2027-03-15T02:30:00-04:00"}},
 		{"GitHub Actions DST gap of 30 minutes", "- timezone: Australia/Lord_Howe\n  cron: '15 2 * * *'", "UTC", "2027-10-02T12:00:00+10:30",
