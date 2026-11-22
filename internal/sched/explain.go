@@ -89,7 +89,14 @@ func dstText(ev DSTEvent, d Dialect, fixed bool) string {
 		times = fmt.Sprintf("%s and %d more", strings.Join(ev.Affected, ", "), ev.AffectedNum-len(ev.Affected))
 	}
 	if ev.Forward {
-		text := head + fmt.Sprintf(" %s does not exist that day, so it is not listed.", times)
+		verb, it := "does", "it is"
+		if ev.AffectedNum > 1 {
+			verb, it = "do", "they are"
+		}
+		if d == GitHubActions {
+			return head + fmt.Sprintf(" %s %s not exist that day; GitHub Actions runs at the next valid time, %s, which is the run listed.", times, verb, ev.At.Format("15:04"))
+		}
+		text := head + fmt.Sprintf(" %s %s not exist that day, so %s not listed.", times, verb, it)
 		if d == Cron && fixed {
 			text += " Vixie cron and cronie run such fixed-time jobs right after the jump."
 		}

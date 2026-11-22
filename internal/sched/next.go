@@ -175,6 +175,16 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 			var runs []Run
 			for _, t := range times {
 				inst := resolve(y, m, d, t[0], t[1], t[2], loc)
+				if s.Dialect == GitHubActions && len(inst) == 0 { // GitHub runs a time skipped by DST at the next valid time: the jump
+					// Read the wall time with the offset from before the jump: that instant lies after it.
+					w := time.Date(y, m, d, t[0], t[1], t[2], 0, time.UTC)
+					_, before := w.Add(-36 * time.Hour).In(loc).Zone()
+					jump, _ := w.Add(-time.Duration(before) * time.Second).In(loc).ZoneBounds()
+					if len(runs) == 0 || !runs[len(runs)-1].Time.Equal(jump) {
+						runs = append(runs, Run{Time: jump})
+					}
+					continue
+				}
 				if s.Dialect == AWS && len(inst) == 2 { // EventBridge Scheduler runs a repeated wall time once, after the clocks fall back
 					later := inst[0]
 					if inst[1].After(later) {

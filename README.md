@@ -70,7 +70,7 @@ The same in the web UI (`cronplain serve`, Explain tab):
   | seconds first (Spring, robfig/cron) | `0 */5 * * * *` | 6 fields without `?` |
   | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
   | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
-  | GitHub Actions | `- cron: '30 5 * * 1'` | a pasted YAML line works, with or without a trailing `# comment`, and so does a pasted `on: schedule:` snippet with one `cron:` line; always evaluated in UTC |
+  | GitHub Actions | `- cron: '30 5 * * 1'` | a pasted YAML line works, with or without a trailing `# comment`, and so does a pasted `on: schedule:` snippet with one `cron:` line; evaluated in UTC unless the entry has a `timezone:` key (an IANA name), and then a time skipped when the clocks jump forward runs at the next valid time (02:30 at 03:00), as GitHub documents |
   | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday) plus AWS's limits (no `/` in day-of-week, only one value with `#`); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone, and then a time repeated when DST ends runs once, in the second pass, as EventBridge Scheduler does |
 
   AWS `rate(...)` and `at(...)` schedules are rejected with a note: they have no calendar pattern to explain. AWS documents only `L`, `W` and `#` among the extensions; cronplain also accepts Quartz's `L-n` and `LW` there, so check those in the AWS console.
@@ -94,7 +94,7 @@ The same in the web UI (`cronplain serve`, Explain tab):
   - runs every minute (or every few seconds);
   - never fires (`0 0 30 2 *`), skips short months (`0 0 31 * *`), February 29 only in leap years;
   - `*/7` in minutes is uneven across the hour;
-  - GitHub Actions: UTC, at most every 5 minutes, busy minute 0, default branch only and 60-day inactivity pause;
+  - GitHub Actions: UTC unless `timezone:` is set, at most every 5 minutes, busy minute 0, default branch only and 60-day inactivity pause;
   - systemd: weekday *and* date must match; no zone means the machine's zone.
   - AWS: rules run in UTC; day-of-week numbers start at 1 = Sunday; exactly one day field must be `?`; `L-n` and `LW` are not in AWS's documentation.
 
@@ -120,14 +120,14 @@ A file with a `- cron:` line or a top-level `on:` or `jobs:` key is read as a Gi
 ```text
 $ cronplain audit examples/nightly.yml
 3 schedule(s) in a GitHub Actions workflow: 1 error(s), 1 warning(s), 3 note(s)
-  line 5   info  0 0 * * *: GitHub Actions evaluates schedules in UTC.
+  line 5   info  0 0 * * *: GitHub Actions evaluates schedules in UTC unless the entry sets timezone: (an IANA name such as Europe/Istanbul) beside cron:.
   line 5   info  0 0 * * *: Minute 0 is the busiest time on GitHub Actions and runs are often delayed or dropped; an odd minute such as 17 is more punctual.
   line 5   info  0 0 * * *: Scheduled workflows run on the default branch only, and GitHub disables them in public repositories after 60 days without activity.
   line 6   warn  */2 * * * *: GitHub Actions does not run scheduled workflows more often than once every 5 minutes.
   line 7   error the schedule starts with * but is not quoted: YAML reads *... as an alias, so GitHub rejects the workflow; quote it: - cron: '*/30 9-17 * * 1-5'
 ```
 
-Each `- cron:` line is checked like `explain -dialect github-actions` would: invalid fields, macros such as `@daily` (GitHub does not take them), the lints above (more often than every 5 minutes, never fires, the either-day rule, minute 0), plus an unquoted schedule that starts with `*` and the same schedule listed twice. Notes that are the same for every line (UTC, default branch) are printed once. cronplain does not parse YAML: it reads `- cron: '...'` lines, one per line, and says so for a flow-style `schedule: [{cron: ...}]` it skipped. `cronplain import` refuses a workflow, since its runs happen on GitHub.
+Each `- cron:` line is checked like `explain -dialect github-actions` would: invalid fields, macros such as `@daily` (GitHub does not take them), the lints above (more often than every 5 minutes, never fires, the either-day rule, minute 0), plus an unquoted schedule that starts with `*` and the same schedule listed twice. A `timezone:` key in the same list entry (before or after `cron:`) is read, and an unknown zone is an error. Notes that are the same for every line (UTC, default branch) are printed once. cronplain does not parse YAML: it reads `- cron: '...'` lines, one per line, and says so for a flow-style `schedule: [{cron: ...}]` it skipped. `cronplain import` refuses a workflow, since its runs happen on GitHub.
 
 ### Heartbeat monitor
 

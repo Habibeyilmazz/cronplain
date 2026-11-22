@@ -11,8 +11,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `cronplain import` refuses a workflow file with a message instead of adding pings to YAML lines; `explain` with several `cron:` lines points at `audit`.
 - `examples/nightly.yml`, a made-up workflow used by the README sample and the tests.
 
+### Fixed (feature round 15)
+- GitHub Actions schedules were always evaluated in UTC, but GitHub now documents an optional `timezone:` key beside `cron:` (an IANA name). A pasted entry or snippet with `timezone:` is now evaluated in that zone (an unknown zone is an error), the note no longer says "always UTC", and a time skipped when the clocks jump forward is listed at the next valid time with a DST note saying so, as GitHub's documentation describes (a 02:30 schedule runs at 03:00; on Lord Howe's 30-minute jump 02:15 runs at 02:30). Several times in one gap give one run. GitHub's docs say nothing about the repeated hour in autumn, so those times stay listed twice, as for crontab.
+- DST notes said "02:00 and 02:30 does not exist"; they now say "do not exist ... they are not listed".
+
 ### Notes for the next person (round 15)
 - Picked by using the product: auditing the workflows of a repository in CI is the obvious next use of "audit exits 1 on warnings", and it produced 11 nonsense errors for an ordinary workflow. No YAML library was added: the checks read `- cron:` lines, which is how every GitHub example and nearly every workflow writes them; flow style is noted, not guessed.
+- Source for the `timezone:` behaviour: GitHub's "Events that trigger workflows" page, schedule section (read this round): UTC by default, optional IANA `timezone:` per entry, shortest interval 5 minutes, skipped spring-forward times move to the next valid time. Not checked against a real scheduled run.
 - Not checked against GitHub itself: whether two `cron:` lines that match the same minute start the workflow twice, so `audit` does not flag such overlaps (only identical lines). Whether GitHub's scheduler applies the Vixie either-day rule is also unverified; the lint is the one `explain` already printed for the GitHub dialect.
 - Reported gaps re-checked: a retry that fails at shutdown too is still lost (documented `shortcut:` in `internal/monitor/alert.go`), no TypeScript explainer (the page calls `/api/explain`; porting the schedule math to TypeScript or building it to WebAssembly is a bigger, separate piece of work), AWS `L-n`/`LW` unverified (no AWS account), private vulnerability reporting is a repo setting for the owner.
 

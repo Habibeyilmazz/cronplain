@@ -12,7 +12,11 @@ func TestWorkflow(t *testing.T) {
 		want, not  []string
 	}{
 		{"clean schedule", "on:\n  schedule:\n    - cron: '17 3 * * 1-5'   # weekdays\n",
-			[]string{"1 schedule(s) in a GitHub Actions workflow: 0 error(s), 0 warning(s), 2 note(s)", "line 3   info  17 3 * * 1-5: GitHub Actions evaluates schedules in UTC."}, nil},
+			[]string{"1 schedule(s) in a GitHub Actions workflow: 0 error(s), 0 warning(s), 2 note(s)", "line 3   info  17 3 * * 1-5: GitHub Actions evaluates schedules in UTC unless"}, nil},
+		// timezone: belongs to its own entry, in either key order
+		{"timezone per entry", "on:\n  schedule:\n    - cron: '30 2 * * 0'\n      # Eastern\n\n      timezone: \"America/New_York\" # NY\n    - timezone: Europe/Istanbul\n      cron: '0 3 * * *'\n    - cron: '30 2 * * 0'\n    - cron: '0 4 * * *'\n      timezone: Mars/Base\nconcurrency:\n  timezone: UTC\n",
+			[]string{"line 3   info  30 2 * * 0: Evaluated in America/New_York, from the timezone: key", "line 8   info  0 3 * * *: Evaluated in Europe/Istanbul",
+				"line 9   info  30 2 * * 0: GitHub Actions evaluates schedules in UTC unless", `line 10  error unknown time zone "Mars/Base"`, "3 schedule(s)"}, []string{"already listed"}},
 		{"no schedule at all", "on: [push]\njobs:\n  x:\n    runs-on: ubuntu-latest\n",
 			[]string{"0 schedule(s) in a GitHub Actions workflow: 0 error(s), 0 warning(s), 0 note(s)"}, nil},
 		// YAML reads an unquoted *... as an alias; GitHub refuses the whole file

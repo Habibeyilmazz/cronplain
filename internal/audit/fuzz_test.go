@@ -12,7 +12,8 @@ import (
 func FuzzRun(f *testing.F) {
 	for _, s := range []string{"0 3 * * * /opt/backup >> /var/log/b.log 2>&1\n", "MAILTO=\"\"\nCRON_TZ=Europe/Istanbul\n*/5 * * * * a; b > log\n",
 		"@reboot x\n@daily { a; b; } > log\n", "0 9 * * 1 root if [ -x /bin/x ]; then x; fi\n", "PATH=/bin\n* * * * * flock -n /tmp/l x || echo failed\n",
-		"\ufeff0 0 30 2 * x 'a;b' \"c && d\" % \\%\r\n", "0 1-3 * * * a &&", "*/1 * * * * cd /x && test -f y && curl -fsS http://127.0.0.1:4230/ping/x/$?\n"} {
+		"\ufeff0 0 30 2 * x 'a;b' \"c && d\" % \\%\r\n", "0 1-3 * * * a &&", "*/1 * * * * cd /x && test -f y && curl -fsS http://127.0.0.1:4230/ping/x/$?\n",
+		"on:\n  schedule:\n    - cron: */5 * * * *\n    - timezone: Europe/Istanbul\n      cron: '0 3 * * *'\n  x: [{cron: 1}]\n"} {
 		f.Add(s, false)
 		f.Add(s, true)
 	}

@@ -3,6 +3,7 @@
 package sched
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -130,14 +131,29 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	if len(text) > 512 {
 		return nil, fmt.Errorf("expression too long")
 	}
-	// A pasted workflow snippet ("on:\n  schedule:\n    - cron: '0 9 * * 1'"): use its one cron: line.
+	// A pasted workflow snippet ("on:\n  schedule:\n    - cron: '0 9 * * 1'"): use its one cron: line
+	// and the timezone: GitHub Actions reads beside it.
+	var ghZone *time.Location
 	if strings.ContainsAny(text, "\r\n") {
 		lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' })
-		var crons []string
+		var crons, zones []string
 		for _, l := range lines {
 			if cronLine.MatchString(l) {
 				crons = append(crons, strings.TrimSpace(l))
 			}
+			if m := tzLine.FindStringSubmatch(l); m != nil {
+				zones = append(zones, strings.Trim(strings.TrimSpace(yamlComment.Split(m[2], 2)[0]), `'"`))
+			}
+		}
+		switch {
+		case len(zones) > 1:
+			return nil, fmt.Errorf("%d timezone: lines: give one schedule entry", len(zones))
+		case len(zones) == 1 && len(crons) == 1:
+			loc, err := LoadZone(zones[0])
+			if err != nil || zones[0] == "" || strings.EqualFold(zones[0], "local") {
+				return nil, fmt.Errorf("unknown time zone %q in timezone: (use an IANA name such as Europe/Istanbul)", zones[0])
+			}
+			ghZone = loc
 		}
 		switch len(crons) {
 		case 0:
@@ -220,7 +236,10 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 		}
 		return nil, err
 	}
-	if d == GitHubActions || d == AWS && s.Location == nil {
+	switch {
+	case d == GitHubActions:
+		s.Location = cmp.Or(ghZone, time.UTC) // UTC unless the entry sets timezone:
+	case d == AWS && s.Location == nil:
 		s.Location = time.UTC // EventBridge rules run in UTC; a CRON_TZ= prefix stands in for a Scheduler time zone
 	}
 	return s, nil
@@ -229,6 +248,7 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 var (
 	yamlComment = regexp.MustCompile(`[ \t]#`)
 	cronLine    = regexp.MustCompile(`^\s*(-\s*)?cron:`)
+	tzLine      = regexp.MustCompile(`^\s*(-\s*)?timezone:\s*(.*)$`)
 )
 
 var systemdShorthands = map[string]string{

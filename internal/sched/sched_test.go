@@ -85,6 +85,9 @@ func TestParseErrors(t *testing.T) {
 		{"", Auto, "empty"},
 		{"schedule:\n  - cron: '0 9 * * 1'\n  - cron: '0 18 * * 5'", Auto, "2 cron: lines"},
 		{"0 9 * * 1\n0 10 * * 1", Auto, "2 lines: give one schedule"},
+		{"- cron: '0 9 * * 1'\n  timezone: Mars/Base", Auto, `unknown time zone "Mars/Base" in timezone:`},
+		{"- cron: '0 9 * * 1'\n  timezone: local", Auto, "unknown time zone"},
+		{"- cron: '0 9 * * 1'\n  timezone: UTC\n  timezone: Europe/Istanbul", Auto, "2 timezone: lines"},
 		{"61 * * * *", Auto, "61 is out of range 0-59"},
 		{"* * * *", Auto, "have 5 fields, got 4"},
 		{"* * 32 * *", Auto, "day-of-month: 32"},
@@ -278,6 +281,13 @@ func TestNext(t *testing.T) {
 			[]string{"2027-01-01T00:00:00Z", "2027-04-01T00:00:00Z"}},
 		{"GitHub Actions is UTC whatever the display zone", "- cron: '30 5 * * 1'", "America/New_York", "2026-11-22T00:00:00Z",
 			[]string{"2026-11-23T05:30:00Z"}},
+		{"GitHub Actions timezone: beside cron:", "- cron: '30 5 * * 1'\n  timezone: \"Europe/Istanbul\" # TR", "UTC", "2026-11-22T00:00:00Z",
+			[]string{"2026-11-23T05:30:00+03:00"}},
+		// GitHub runs a time skipped by spring-forward at the next valid time (its docs: 2:30 AM runs at 3:00 AM), once
+		{"GitHub Actions DST gap moves to the jump", "- cron: '0,30 2 * * *'\n  timezone: America/New_York", "UTC", "2027-03-13T12:00:00Z",
+			[]string{"2027-03-14T03:00:00-04:00", "2027-03-15T02:00:00-04:00", "2027-03-15T02:30:00-04:00"}},
+		{"GitHub Actions DST gap of 30 minutes", "- timezone: Australia/Lord_Howe\n  cron: '15 2 * * *'", "UTC", "2027-10-02T12:00:00+10:30",
+			[]string{"2027-10-03T02:30:00+11:00", "2027-10-04T02:15:00+11:00"}},
 		{"CRON_TZ", "CRON_TZ=Asia/Tokyo 0 9 * * *", "UTC", "2026-11-21T23:00:00Z",
 			[]string{"2026-11-22T09:00:00+09:00"}},
 		{"reboot has no times", "@reboot", "UTC", "2026-11-22T00:00:00Z", nil},
@@ -382,7 +392,8 @@ func TestLints(t *testing.T) {
 		{"*/7 * * * *", Cron, []string{"gap between 56 and 0 is 4, not 7"}, nil},
 		{"*/15 * * * *", Cron, nil, []string{"gap between"}},
 		{"*/2 * * * *", GitHubActions, []string{"more often than once every 5 minutes", "UTC", "Minute 0 is the busiest"}, nil},
-		{"17 3 * * *", GitHubActions, []string{"60 days"}, []string{"busiest", "5 minutes"}},
+		{"17 3 * * *", GitHubActions, []string{"60 days", "UTC unless the entry sets timezone:"}, []string{"busiest", "5 minutes"}},
+		{"- cron: '17 3 * * *'\n  timezone: Asia/Tokyo", GitHubActions, []string{"Evaluated in Asia/Tokyo, from the timezone: key"}, []string{"UTC"}},
 		{"@hourly", Cron, []string{`shorthand for "0 * * * *"`}, nil},
 		{"0 0 * * 7", Cron, []string{"7 means Sunday"}, nil},
 		{"0 0 ? * *", Cron, []string{"Quartz-ism"}, nil},
@@ -435,6 +446,13 @@ func TestExplain(t *testing.T) {
 	}
 	if !strings.Contains(e.DST[0], "at 02:00 EST (now 03:00 EDT)") {
 		t.Errorf("DST note should name the clock change: %q", e.DST[0])
+	}
+	gh, err := Explain("- cron: '0,30 2 * * *'\n  timezone: America/New_York", Auto, time.UTC, 3, at(t, "2027-03-13T12:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gh.DST) != 1 || !strings.Contains(gh.DST[0], "02:00 and 02:30 do not exist that day; GitHub Actions runs at the next valid time, 03:00, which is the run listed") {
+		t.Errorf("GitHub Actions spring-forward note = %q", gh.DST)
 	}
 	a, err := Explain("CRON_TZ=America/New_York cron(30 1 * * ? *)", Auto, time.UTC, 3, at(t, "2027-11-06T12:00:00Z"))
 	if err != nil {

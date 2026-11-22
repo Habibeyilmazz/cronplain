@@ -82,7 +82,11 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 			info("Quartz numbers days of the week 1 = Sunday ... 7 = Saturday, not 0-6 like crontab.")
 		}
 	case GitHubActions:
-		info("GitHub Actions evaluates schedules in UTC.")
+		if s.Location == time.UTC {
+			info("GitHub Actions evaluates schedules in UTC unless the entry sets timezone: (an IANA name such as Europe/Istanbul) beside cron:.")
+		} else {
+			info("Evaluated in %s, from the timezone: key of the schedule entry.", s.Location)
+		}
 		if gap > 0 && gap < 5*time.Minute {
 			warn("GitHub Actions does not run scheduled workflows more often than once every 5 minutes.")
 		}
