@@ -23,7 +23,7 @@ before(async () => {
     server.stdout.on("data", (b) => b.toString().includes("cronplain dashboard:") && resolve());
   });
   browser = await chromium.launch();
-  const ctx = await browser.newContext({ timezoneId: "Europe/Istanbul", locale: "en-GB" });
+  const ctx = await browser.newContext({ timezoneId: "Europe/Istanbul", locale: "en-GB", permissions: ["clipboard-read", "clipboard-write"] });
   page = await ctx.newPage();
   page.setDefaultTimeout(5000);
 });
@@ -58,6 +58,16 @@ test("explain: description, runs, wrapped range and an invalid field", async () 
   await page.waitForFunction(() => document.querySelector("#lints").textContent.includes("never fires"));
   assert.equal(await text("#runs-title"), "Next runs");
   assert.match(await text("#runs"), /No upcoming runs/);
+});
+
+test("explain: pasting a workflow snippet keeps its cron: line", async () => {
+  await page.evaluate(() => navigator.clipboard.writeText("on:\n  schedule:\n    - cron: '17 6 * * 1'  # Mondays\n  workflow_dispatch:\n"));
+  await page.fill("#expr", "");
+  await page.focus("#expr");
+  await page.keyboard.press("ControlOrMeta+V");
+  await page.waitForFunction(() => document.querySelector("#sentence").textContent.includes("06:17"));
+  assert.equal(await page.inputValue("#expr"), "- cron: '17 6 * * 1'  # Mondays");
+  assert.equal(await text("#sentence"), "At 06:17 on Monday (UTC time).");
 });
 
 test("monitor: add a job, ping it, see it on time, delete it", async () => {

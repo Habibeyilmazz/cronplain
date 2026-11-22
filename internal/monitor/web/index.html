@@ -309,6 +309,14 @@ function clear(html, invalid) { // invalid: selector of the input to mark, if an
 }
 function soon() { clearTimeout(timer); timer = setTimeout(explain, 200); }
 for (const id of ["#expr", "#tz", "#n"]) $(id).addEventListener("input", soon);
+// A one-line field drops the newlines of a pasted workflow snippet; keep its one cron: line instead.
+for (const field of [$("#expr"), $('#add [name="schedule"]')]) field.addEventListener("paste", (e) => {
+  const crons = e.clipboardData.getData("text").split(/\r?\n|\r/).filter((l) => /^\s*(-\s*)?cron:/.test(l));
+  if (crons.length !== 1) return;
+  e.preventDefault();
+  field.setRangeText(crons[0].trim(), field.selectionStart, field.selectionEnd, "end");
+  field.dispatchEvent(new Event("input"));
+});
 $("#dialect").addEventListener("change", explain);
 document.querySelectorAll(".examples button").forEach((b) => b.onclick = () => { $("#expr").value = b.textContent; $("#dialect").value = "auto"; explain(); });
 

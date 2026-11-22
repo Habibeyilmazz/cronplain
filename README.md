@@ -61,7 +61,7 @@ Daylight saving time:
   | seconds first (Spring, robfig/cron) | `0 */5 * * * *` | 6 fields without `?` |
   | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
   | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
-  | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works, with or without a trailing `# comment`; always evaluated in UTC |
+  | GitHub Actions | `- cron: '30 5 * * 1'` | a pasted YAML line works, with or without a trailing `# comment`, and so does a pasted `on: schedule:` snippet with one `cron:` line; always evaluated in UTC |
   | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday) plus AWS's limits (no `/` in day-of-week, only one value with `#`); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone, and then a time repeated when DST ends runs once, in the second pass, as EventBridge Scheduler does |
 
   AWS `rate(...)` and `at(...)` schedules are rejected with a note: they have no calendar pattern to explain. AWS documents only `L`, `W` and `#` among the extensions; cronplain also accepts Quartz's `L-n` and `LW` there, so check those in the AWS console.

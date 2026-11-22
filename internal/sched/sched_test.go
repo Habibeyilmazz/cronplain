@@ -48,13 +48,15 @@ func TestDetect(t *testing.T) {
 		"- cron: \"0 9 * * 1\"  # 09:00 UTC": GitHubActions,
 		"- cron: 0 9 * * 1 # Mondays":        GitHubActions,
 		"cron: 0 9 * * 1\t# Mondays":         GitHubActions,
-		"CRON_TZ=Europe/Istanbul 0 9 * * *":  Cron,
-		"cron(0 12 * * ? *)":                 AWS,
-		`"cron(0 12 * * ? *)"`:               AWS,
-		"0 18 ? * MON-FRI *":                 AWS,
-		"0 8 1W * ? *":                       AWS,
-		"15 10 ? * 6L 2027":                  AWS,
-		"0 12 * JUL ? *":                     AWS,
+		"on:\n  schedule:\n    - cron: '30 5 * * 1' # Mondays\n  workflow_dispatch:\n": GitHubActions,
+		"schedule:\r\n  - cron: \"0 9 * * *\"\r\n":                                     GitHubActions,
+		"CRON_TZ=Europe/Istanbul 0 9 * * *":                                            Cron,
+		"cron(0 12 * * ? *)":                                                           AWS,
+		`"cron(0 12 * * ? *)"`:                                                         AWS,
+		"0 18 ? * MON-FRI *":                                                           AWS,
+		"0 8 1W * ? *":                                                                 AWS,
+		"15 10 ? * 6L 2027":                                                            AWS,
+		"0 12 * JUL ? *":                                                               AWS,
 	}
 	for expr, want := range cases {
 		s, err := Parse(expr, Auto)
@@ -78,6 +80,8 @@ func TestParseErrors(t *testing.T) {
 		want    string
 	}{
 		{"", Auto, "empty"},
+		{"schedule:\n  - cron: '0 9 * * 1'\n  - cron: '0 18 * * 5'", Auto, "2 cron: lines"},
+		{"0 9 * * 1\n0 10 * * 1", Auto, "2 lines: give one schedule"},
 		{"61 * * * *", Auto, "61 is out of range 0-59"},
 		{"* * * *", Auto, "have 5 fields, got 4"},
 		{"* * 32 * *", Auto, "day-of-month: 32"},

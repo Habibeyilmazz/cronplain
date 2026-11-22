@@ -129,6 +129,24 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	if len(text) > 512 {
 		return nil, fmt.Errorf("expression too long")
 	}
+	// A pasted workflow snippet ("on:\n  schedule:\n    - cron: '0 9 * * 1'"): use its one cron: line.
+	if strings.ContainsAny(text, "\r\n") {
+		lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' })
+		var crons []string
+		for _, l := range lines {
+			if cronLine.MatchString(l) {
+				crons = append(crons, strings.TrimSpace(l))
+			}
+		}
+		switch len(crons) {
+		case 0:
+			return nil, fmt.Errorf("%d lines: give one schedule, or a GitHub Actions snippet with one cron: line", len(lines))
+		case 1:
+			text = crons[0]
+		default:
+			return nil, fmt.Errorf("%d cron: lines: explain them one at a time", len(crons))
+		}
+	}
 	// GitHub Actions YAML: "- cron: '0 9 * * 1'"
 	if t := strings.TrimSpace(strings.TrimPrefix(text, "-")); strings.HasPrefix(t, "cron:") {
 		v := strings.TrimSpace(strings.TrimPrefix(t, "cron:"))
@@ -196,7 +214,10 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	return s, nil
 }
 
-var yamlComment = regexp.MustCompile(`[ \t]#`)
+var (
+	yamlComment = regexp.MustCompile(`[ \t]#`)
+	cronLine    = regexp.MustCompile(`^\s*(-\s*)?cron:`)
+)
 
 var systemdShorthands = map[string]string{
 	"minutely": "*-*-* *:*:00", "hourly": "*-*-* *:00:00", "daily": "*-*-* 00:00:00",
