@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cronplain</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%231F5FBF' stroke-width='3'/%3E%3Cpath d='M16 8v8l5 4' fill='none' stroke='%231F5FBF' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --paper: #eef1f4;
+  --sheet: #ffffff;
+  --ink: #1a2433;
+  --muted: #586374;
+  --rule: #c9d0d9;
+  --accent: #1f5fbf;
+  --ochre: #8f5200;
+  --ochre-bg: #fbf1e2;
+  --late: #b3261e;
+  --up: #2e7d4f;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121820; --sheet: #19212b; --ink: #e4e9f0; --muted: #96a1b0; --rule: #2c3644;
+    --accent: #79a8ff; --ochre: #e6a854; --ochre-bg: #2a2114; --late: #ff7b72; --up: #5cc98a;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0 12px; flex-wrap: wrap; }
+.mark { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
+.mark svg { width: 26px; height: 26px; }
+nav { display: flex; gap: 4px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; padding: 4px; }
+nav button { font: inherit; font-size: 15px; border: 0; background: none; color: var(--muted); padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+
+/* The expression is the one loud thing on the page. */
+.expr-box { margin-top: 28px; }
+.expr-box label { display: block; color: var(--muted); font-size: 15px; margin-bottom: 6px; }
+#expr { width: 100%; font: 600 clamp(24px, 5vw, 40px)/1.2 var(--mono); color: var(--ink); background: var(--sheet);
+  border: 2px solid var(--ink); border-radius: 10px; padding: 14px 16px; letter-spacing: 0.02em; }
+.fields { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 2px 0; min-height: 44px; }
+.fields div { display: flex; flex-direction: column; }
+.fields code { font: 600 18px/1.3 var(--mono); border-bottom: 3px solid var(--accent); padding-bottom: 2px; align-self: flex-start; }
+.fields span { font-size: 13px; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 16px; align-items: end; }
+.controls label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); gap: 4px; }
+input, select { font: inherit; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; }
+#tz { width: 220px; }
+#n { width: 80px; }
+.examples { font-size: 14px; color: var(--muted); margin-top: 14px; }
+.examples button { font: 13px var(--mono); color: var(--accent); background: none; border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; margin: 3px 2px; cursor: pointer; }
+
+#sentence { font-size: clamp(22px, 3.2vw, 30px); line-height: 1.3; font-weight: 600; letter-spacing: -0.01em; margin: 30px 0 6px; max-width: 30em; }
+#meta { color: var(--muted); font-size: 15px; margin: 0 0 24px; }
+.error { color: var(--late); font-weight: 600; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; padding-bottom: 48px; }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+h2 { font-size: 17px; margin: 0 0 10px; }
+.timetable { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.timetable table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.timetable td { padding: 7px 14px; border-top: 1px solid var(--rule); white-space: nowrap; }
+.timetable tr:first-child td { border-top: 0; }
+.timetable .day { color: var(--muted); width: 3.5em; }
+.timetable .time { font-weight: 650; }
+.timetable .zone { color: var(--muted); text-align: right; font-size: 14px; }
+.timetable tr.zone-change td { border-top: 2px solid var(--ochre); }
+.timetable tr.repeated .time::after { content: " twice"; font-weight: 400; color: var(--ochre); font-size: 13px; }
+.notes ul { list-style: none; margin: 0 0 24px; padding: 0; }
+.notes li { padding: 10px 14px; border-left: 4px solid var(--rule); background: var(--sheet); margin-bottom: 8px; border-radius: 0 8px 8px 0; font-size: 15px; }
+.notes li.warn { border-left-color: var(--late); }
+.notes li.dst { border-left-color: var(--ochre); background: var(--ochre-bg); }
+.notes .none { color: var(--muted); font-size: 15px; }
+
+/* Monitor */
+.intro { color: var(--muted); max-width: 46em; margin: 28px 0 20px; }
+.jobs { width: 100%; border-collapse: collapse; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; font-size: 15px; }
+.jobs th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.jobs td { padding: 12px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.jobs tr:last-child td { border-bottom: 0; }
+.jobs code { font: 14px var(--mono); }
+.jobs .desc { color: var(--muted); font-size: 14px; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
+.state::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.state.up::before { background: var(--up); }
+.state.late { color: var(--late); }
+.state.late::before { background: var(--late); }
+.state.new::before { background: transparent; border: 2px solid var(--muted); width: 6px; height: 6px; }
+.curl { display: flex; gap: 6px; align-items: center; }
+.curl code { background: var(--paper); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.btn { font: inherit; font-size: 14px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); padding: 8px 16px; }
+.btn.danger { color: var(--late); }
+.empty { background: var(--sheet); border: 1px dashed var(--rule); border-radius: 10px; padding: 24px; color: var(--muted); }
+form.add { display: grid; grid-template-columns: 1fr 1.4fr 1fr 0.6fr auto; gap: 12px; align-items: end; margin: 28px 0 8px; }
+form.add label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); gap: 4px; }
+form.add input { width: 100%; }
+#add-msg { min-height: 1.5em; font-size: 15px; padding-bottom: 48px; }
+@media (max-width: 760px) {
+  form.add { grid-template-columns: 1fr 1fr; }
+  .jobs thead { display: none; }
+  .jobs, .jobs tbody, .jobs tr, .jobs td { display: block; width: 100%; }
+  .jobs tr { border-bottom: 1px solid var(--rule); }
+  .jobs td { border: 0; padding: 6px 14px; }
+}
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) { #sentence { transition: opacity .15s; } }
+.stale { opacity: .45; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 8v8l5 4" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>
+      cronplain
+    </div>
+    <nav role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-explain" aria-controls="explain" aria-selected="true">Explain</button>
+      <button role="tab" id="tab-monitor" aria-controls="monitor" aria-selected="false">Monitor</button>
+    </nav>
+  </header>
+
+  <main>
+  <section id="explain" role="tabpanel" aria-labelledby="tab-explain">
+    <div class="expr-box">
+      <label for="expr">Schedule: crontab, Quartz, systemd OnCalendar or a GitHub Actions <code>cron:</code> line</label>
+      <input id="expr" value="30 2 * * 1-5" autocomplete="off" spellcheck="false">
+      <div class="fields" id="fields" aria-hidden="true"></div>
+    </div>
+    <div class="controls">
+      <label>Time zone <input id="tz" list="zones" autocomplete="off"></label>
+      <datalist id="zones"></datalist>
+      <label>Syntax
+        <select id="dialect">
+          <option value="auto">Detect</option>
+          <option value="cron">crontab (5 fields)</option>
+          <option value="cron-seconds">With seconds (6 fields)</option>
+          <option value="quartz">Quartz</option>
+          <option value="github-actions">GitHub Actions</option>
+          <option value="systemd">systemd OnCalendar</option>
+        </select>
+      </label>
+      <label>Runs <input id="n" type="number" min="1" max="100" value="20"></label>
+    </div>
+    <div class="examples">Try:
+      <button type="button">0 9 1-7 * 1</button>
+      <button type="button">30 1 * * *</button>
+      <button type="button">0 0 30 2 *</button>
+      <button type="button">0 0 12 ? * 6#3</button>
+      <button type="button">Mon..Fri *-*-* 18:00</button>
+      <button type="button">- cron: '*/2 * * * *'</button>
+    </div>
+
+    <div aria-live="polite">
+      <p id="sentence"></p>
+      <p id="meta"></p>
+    </div>
+    <div class="cols">
+      <div>
+        <h2 id="runs-title">Next runs</h2>
+        <div class="timetable"><table><tbody id="runs"></tbody></table></div>
+      </div>
+      <div class="notes">
+        <h2>Clock changes</h2>
+        <ul id="dst"></ul>
+        <h2>Things to know</h2>
+        <ul id="lints"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
+    <p class="intro">Each job calls its ping URL when it succeeds. If a ping has not arrived by the next scheduled run plus the grace period, cronplain raises an alert on the terminal and on any webhook or ntfy topic you started it with.</p>
+    <div id="jobs"></div>
+    <form class="add" id="add">
+      <label>Job name <input name="id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" placeholder="nightly-backup"></label>
+      <label>Schedule <input name="schedule" required placeholder="0 3 * * *" spellcheck="false"></label>
+      <label>Time zone <input name="tz" list="zones" required></label>
+      <label>Grace (min) <input name="grace" type="number" min="0" max="10080" value="5" required></label>
+      <button class="btn primary" type="submit">Add job</button>
+    </form>
+    <p id="add-msg" role="status"></p>
+  </section>
+  </main>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+// Tabs
+const tabs = { explain: $("#tab-explain"), monitor: $("#tab-monitor") };
+function show(name) {
+  for (const [k, b] of Object.entries(tabs)) {
+    b.setAttribute("aria-selected", String(k === name));
+    $("#" + k).hidden = k !== name;
+  }
+  if (name === "monitor") loadJobs();
+}
+tabs.explain.onclick = () => { history.replaceState(null, "", "#explain"); show("explain"); };
+tabs.monitor.onclick = () => { history.replaceState(null, "", "#monitor"); show("monitor"); };
+
+// Zones
+try {
+  $("#zones").innerHTML = Intl.supportedValuesOf("timeZone").map((z) => `<option value="${esc(z)}">`).join("");
+} catch (e) { /* older browsers: free text still works */ }
+$("#tz").value = browserZone;
+document.querySelector('#add [name="tz"]').value = browserZone;
+
+// Explain
+const labels = {
+  cron: ["minute", "hour", "day of month", "month", "day of week"],
+  "github-actions": ["minute", "hour", "day of month", "month", "day of week"],
+  "cron-seconds": ["second", "minute", "hour", "day of month", "month", "day of week"],
+  quartz: ["second", "minute", "hour", "day of month", "month", "day of week", "year"],
+  systemd: null,
+};
+function drawFields(expr, dialect) {
+  const toks = expr.split(/\s+/).filter(Boolean);
+  const names = labels[dialect];
+  if (!names || expr.startsWith("@") || toks.length !== names.length && !(dialect === "quartz" && toks.length === 6)) {
+    $("#fields").innerHTML = "";
+    return;
+  }
+  $("#fields").innerHTML = toks.map((t, i) => `<div><code>${esc(t)}</code><span>${names[i]}</span></div>`).join("");
+}
+
+let timer, seq = 0;
+async function explain() {
+  const expr = $("#expr").value.trim();
+  if (!expr) return;
+  const my = ++seq;
+  const q = new URLSearchParams({ expr, tz: $("#tz").value.trim() || "UTC", dialect: $("#dialect").value, n: $("#n").value || "20" });
+  $("#sentence").classList.add("stale");
+  let data;
+  try {
+    const r = await fetch("/api/explain?" + q);
+    data = await r.json();
+  } catch (e) {
+    data = { error: "cronplain is not reachable. Is cronplain serve still running?" };
+  }
+  if (my !== seq) return;
+  $("#sentence").classList.remove("stale");
+  if (data.error) {
+    $("#sentence").innerHTML = `<span class="error">${esc(data.error)}</span>`;
+    $("#meta").textContent = "";
+    $("#fields").innerHTML = "";
+    for (const id of ["#runs", "#dst", "#lints"]) $(id).innerHTML = "";
+    return;
+  }
+  drawFields(data.expr, data.dialect);
+  $("#sentence").textContent = data.description;
+  const names = { cron: "crontab", "cron-seconds": "cron with seconds", quartz: "Quartz", "github-actions": "GitHub Actions", systemd: "systemd OnCalendar" };
+  $("#meta").textContent = `Read as ${names[data.dialect]}, evaluated in ${data.zone}` + (data.zone !== data.display_zone ? `, shown in ${data.display_zone}` : "") + ".";
+  $("#runs-title").textContent = data.runs.length ? `Next ${data.runs.length} runs` : "Next runs";
+  let prev = null;
+  $("#runs").innerHTML = data.runs.length ? data.runs.map((r) => {
+    const [day, date, time] = r.local.split(" ");
+    const changed = prev !== null && prev !== r.offset;
+    prev = r.offset;
+    const cls = [changed ? "zone-change" : "", r.repeated ? "repeated" : ""].join(" ").trim();
+    return `<tr class="${cls}"${changed ? ' title="UTC offset changed before this run"' : ""}><td class="day">${esc(day)}</td><td>${esc(date)}</td><td class="time">${esc(time)}</td><td class="zone">${esc(r.abbrev)} ${esc(r.offset)}</td></tr>`;
+  }).join("") : `<tr><td class="none">No upcoming runs.</td></tr>`;
+  $("#dst").innerHTML = data.dst.length ? data.dst.map((t) => `<li class="dst">${esc(t)}</li>`).join("") : `<li class="none">No clock changes before the last listed run.</li>`;
+  $("#lints").innerHTML = data.lints.length ? data.lints.map((l) => `<li class="${esc(l.level)}">${esc(l.message)}</li>`).join("") : `<li class="none">Nothing surprising about this schedule.</li>`;
+}
+function soon() { clearTimeout(timer); timer = setTimeout(explain, 200); }
+for (const id of ["#expr", "#tz", "#n"]) $(id).addEventListener("input", soon);
+$("#dialect").addEventListener("change", explain);
+document.querySelectorAll(".examples button").forEach((b) => b.onclick = () => { $("#expr").value = b.textContent; $("#dialect").value = "auto"; explain(); });
+
+// Monitor
+function ago(iso) {
+  if (!iso) return "never";
+  const s = Math.round((Date.now() - Date.parse(iso)) / 1000);
+  if (s < 0) return "in " + until(iso);
+  if (s < 90) return s + "s ago";
+  if (s < 5400) return Math.round(s / 60) + " min ago";
+  if (s < 172800) return Math.round(s / 3600) + " h ago";
+  return Math.round(s / 86400) + " days ago";
+}
+function until(iso) {
+  const s = Math.round((Date.parse(iso) - Date.now()) / 1000);
+  if (s < 0) return ago(iso);
+  if (s < 90) return "in " + s + "s";
+  if (s < 5400) return "in " + Math.round(s / 60) + " min";
+  if (s < 172800) return "in " + Math.round(s / 3600) + " h";
+  return "in " + Math.round(s / 86400) + " days";
+}
+const stateText = { up: "On time", late: "Late", new: "Waiting for first ping", never: "Never runs again" };
+async function loadJobs() {
+  let jobs;
+  try { jobs = await (await fetch("/api/jobs")).json(); } catch (e) { return; }
+  if (!jobs.length) {
+    $("#jobs").innerHTML = `<div class="empty">No jobs yet. Add one below, then end the job's crontab line with <code>&amp;&amp; curl -fsS ${esc(location.origin)}/ping/NAME</code>.</div>`;
+    return;
+  }
+  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th>Ping command</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
+    jobs.map((j) => {
+      const cmd = `curl -fsS ${location.origin}${j.ping_path}`;
+      const due = j.due ? new Date(j.due) : null;
+      return `<tr>
+        <td><span class="state ${esc(j.state)}">${esc(stateText[j.state] || j.state)}</span></td>
+        <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)} ${esc(j.tz)}, grace ${Math.round(j.grace_seconds / 60)} min</div></td>
+        <td title="${esc(j.last_ping || "")}">${esc(ago(j.last_ping))}</td>
+        <td>${due ? `<span title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
+        <td><div class="curl"><code>${esc(cmd)}</code><button class="btn" type="button" data-copy="${esc(cmd)}">Copy</button></div></td>
+        <td><button class="btn danger" type="button" data-del="${esc(j.id)}">Delete</button></td>
+      </tr>`;
+    }).join("") + `</tbody></table>`;
+}
+$("#jobs").addEventListener("click", async (e) => {
+  const c = e.target.closest("[data-copy]"), d = e.target.closest("[data-del]");
+  if (c) {
+    try { await navigator.clipboard.writeText(c.dataset.copy); c.textContent = "Copied"; } catch (err) { c.textContent = "Select and copy"; }
+    setTimeout(() => (c.textContent = "Copy"), 1500);
+  }
+  if (d && confirm(`Delete job "${d.dataset.del}"? Its ping history is lost.`)) {
+    await fetch("/api/jobs/" + encodeURIComponent(d.dataset.del), { method: "DELETE" });
+    loadJobs();
+  }
+});
+$("#add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = { id: f.get("id"), schedule: f.get("schedule"), tz: f.get("tz"), grace_seconds: Number(f.get("grace")) * 60 };
+  const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) { $("#add-msg").innerHTML = `<span class="error">${esc(data.error)}</span>`; return; }
+  $("#add-msg").textContent = `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`;
+  e.target.reset();
+  document.querySelector('#add [name="tz"]').value = browserZone;
+  loadJobs();
+});
+setInterval(() => { if (!$("#monitor").hidden) loadJobs(); }, 10000);
+
+show(location.hash === "#monitor" ? "monitor" : "explain");
+explain();
+</script>
+</body>
+</html>
