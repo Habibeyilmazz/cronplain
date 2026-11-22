@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (reliability round 5; each reproduced first, then a failing test, then the fix)
+- `serve -db 'we?ird.db'` wrote to a file named `we`, `hash#x.db` to `hash`, `pct%20x.db` to `pct x.db`: the path went into the SQLite URI unescaped (a name containing `?mode=ro` could even change how it opened). The path is now escaped. The database, and SQLite's `-wal`/`-shm` files with it, is created mode 0600 instead of following the umask (closes the old umask note).
+- Wrap-around ranges read as two halves: `FRI-MON` was "Friday through Saturday and Sunday through Monday"; now "Friday through Monday". Same for hours (`20-2`), days (`30-2`), months (`NOV-FEB`) and stepped wraps (`22-2/3`).
+- `0 0 0 1 1 ? 2025` said "Day 1 never occurs in January"; it now says the year field lists only past years. The day reason is given only when the day exists in none of the months.
+- `0 9 * 1 *` read "At 09:00 in January." (sounds like one date); now "At 09:00 every day in January." Also systemd `2027-*-* 00:00`.
+- A pasted GitHub Actions line with a YAML comment, `- cron: '0 9 * * 1' # every Monday`, failed with "5 fields, got 8".
+- "Next 1 runs" is now "Next run" (CLI and web page).
+
+### Added (reliability round 5)
+- `audit` flags a UTF-8 byte order mark (it made line 1, often `SHELL=`, read as a broken job), Windows CRLF line endings and a last line without a newline, which cron mishandles.
+- AWS: an info note when `L-n` or `LW` is used. Checked against the EventBridge Scheduler docs: day-of-month wildcards are `, - * ? / L W`; neither form is listed, so cronplain still parses them but says to check.
+- `e2e/`: a Playwright (1.65.1, Chromium) test of the dashboard journey run with Node's built-in test runner: explain (including a wrapped AWS range, an invalid field and a never-firing schedule), add a job, ping it like cron would, see it on time, delete it, and a refused schedule. It builds the binary and serves on 127.0.0.1:4234; CI runs it as a separate `e2e` job.
+
 ### Added (feature round 4)
 - AWS EventBridge schedules: `cron(0 9 ? * MON-FRI *)` (also quoted, as pasted from Terraform or CloudFormation) or the bare six fields `minute hour day-of-month month day-of-week year`, detected automatically or with `-dialect aws-eventbridge`. Before, `cron(0 12 * * ? *)` failed with `second: "cron(0" is not a number`. Uses the Quartz day rules (`?`, `L`, `nW`, `n#k`, 1 = Sunday); evaluated in UTC like EventBridge rules, or in the zone of a `CRON_TZ=` prefix (EventBridge Scheduler time zones). Lints: UTC, and 1 = Sunday when the weekday field has numbers. `rate(...)` and `at(...)` get an explanation instead of a parse error. Works in the web explainer (syntax option, field labels, example button) and for monitor jobs.
 - Quartz and AWS ranges that wrap past the end of a field (`20-2` hours, `FRI-MON`, `30-2` days); a step carries over (`22-2/3` is 22:00 and 01:00). Crontab syntax still rejects them, as Vixie cron does.
@@ -50,10 +63,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Recovered webhook alerts no longer carry a zero `due` time.
 
 ### Notes for the next person
+- Round 5 (reliability) also tried and found fine: empty/whitespace/oversized expressions, full-width digits, NBSP between fields, `-n`/`-tz`/`-check-every` bounds, a directory or non-SQLite file as `-db`, Santiago's midnight DST and Lord Howe's 30-minute DST, years up to 2199, never-firing schedules (each `/api/explain` under 50 ms), audit fuzzing (20 s) and explain fuzzing (30 s).
+- Known and left alone: a failed webhook/ntfy delivery is not retried (the job is already marked alerted; README says so). Pasting several YAML lines (`schedule:` plus `- cron:`) is not understood; one line is. `TZ=A CRON_TZ=B expr` (both prefixes, in that order) gives a confusing error.
 - Round 4 (feature) picked AWS support after trying the tool as a newcomer: it was the most common schedule syntax that failed outright. Detection: 6 fields with a Quartz day marker in fields 3 or 5 (1-based) is AWS; in fields 4 or 6 it is Quartz, so the two never collide. AWS is parsed by prepending a `0` seconds field and reusing the Quartz parser (`parseCron`).
 - Round 4 checked the reported gaps: auditing 200 never-firing lines takes 0.8 s (4 ms a line), not worth a cache yet. The SQLite umask note and the missing TypeScript explainer still stand.
 - Security round 3 also checked, and found fine: HTML escaping of every API value in the page, Host-header and cross-origin guards, job id/zone/topic validation (zone names with `..` or `/` prefixes are refused by `time.LoadLocation`), audit and explain output (control characters in a crontab are not echoed raw), git history (no secrets; only the noreply identity), PNG metadata, action SHAs (match their tags), `persist-credentials: false`, least-privilege `permissions`. Worst-case `/api/explain` (`* * * * * *`, n=100) takes about 35 ms.
-- Not changed: the SQLite file is created with the process umask (usually 0644); it holds job names and ping times only, no alert URLs.
 - When CI fails at the govulncheck step with a standard-library finding, raise the `go` line in `go.mod` to the fixed patch release.
 - Schedule engine: `internal/sched` (parse.go, systemd.go, next.go, describe.go, lint.go, explain.go). All UI and CLI output goes through `sched.Explain`.
 - Not implemented (rejected with a clear error): systemd fractional seconds, Quartz `L-nW`, wrap-around crontab ranges such as `FRI-MON`.

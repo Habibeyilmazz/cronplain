@@ -61,7 +61,7 @@ Daylight saving time:
   | seconds first (Spring, robfig/cron) | `0 */5 * * * *` | 6 fields without `?` |
   | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
   | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
-  | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works; always evaluated in UTC |
+  | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works, with or without a trailing `# comment`; always evaluated in UTC |
   | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday) plus AWS's limits (no `/` in day-of-week, only one value with `#`); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone, and then a time repeated when DST ends runs once, in the second pass, as EventBridge Scheduler does |
 
   AWS `rate(...)` and `at(...)` schedules are rejected with a note: they have no calendar pattern to explain. AWS documents only `L`, `W` and `#` among the extensions; cronplain also accepts Quartz's `L-n` and `LW` there, so check those in the AWS console.
@@ -78,7 +78,7 @@ Daylight saving time:
   - `*/7` in minutes is uneven across the hour;
   - GitHub Actions: UTC, at most every 5 minutes, busy minute 0, default branch only and 60-day inactivity pause;
   - systemd: weekday *and* date must match; no zone means the machine's zone.
-  - AWS: rules run in UTC; day-of-week numbers start at 1 = Sunday; exactly one day field must be `?`.
+  - AWS: rules run in UTC; day-of-week numbers start at 1 = Sunday; exactly one day field must be `?`; `L-n` and `LW` are not in AWS's documentation.
 
 ### Audit a crontab
 
@@ -92,7 +92,7 @@ $ cronplain audit examples/crontab.sample
   ...
 ```
 
-Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
+Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
 Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user field after the schedule; one file per run), `-` to read stdin, `-json` for machines. The exit code is 1 when there is any warning or error, so it can gate CI.
 
 ### Heartbeat monitor
@@ -111,7 +111,7 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 3. If no ping arrives by *the first scheduled run after the last ping + grace*, cronplain alerts once, and again with "recovered" when the next ping arrives. When DST ends and an hour repeats, a fixed-time job is expected only once, because cron runs it only once.
 
 Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state`, `schedule`, `due`, `last_ping`, `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
-Jobs and ping times live in one SQLite file (`-db`). Pings accept `GET`, `POST` or `HEAD`.
+Jobs and ping times live in one SQLite file (`-db`, created readable by your user only). A failed webhook or ntfy delivery is logged and not retried; the terminal line is always written. Pings accept `GET`, `POST` or `HEAD`.
 Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
 The page follows the system light or dark theme, works at phone width, and is usable from the keyboard alone.
 
@@ -128,9 +128,11 @@ The dashboard has no login, so `serve` only binds to loopback addresses and refu
 - `internal/monitor` is `net/http` (with `http.CrossOriginProtection`), `modernc.org/sqlite` and one embedded HTML page with no build step and no external requests.
 
 Tests are table-driven and cover DST in America/New_York, Europe/Berlin and Europe/Istanbul (including its last DST changes in 2015-2016 and none since), leap years and 2100, 30 February never firing, Quartz edge cases such as `1W` on a Saturday, the Vixie OR rule, the audit checks, and the monitor end to end against fake webhook and ntfy servers.
+A browser test (`e2e/`, Playwright with Chromium) builds the binary, starts `serve` on port 4234 and walks through explaining a schedule, adding a job, pinging it and deleting it.
 
 ```sh
 go test -race ./...
+cd e2e && npm ci && npx playwright install chromium && npm test   # needs Go and Node 22
 ```
 
 ## Roadmap
