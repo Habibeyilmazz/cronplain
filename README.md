@@ -6,7 +6,7 @@
 
 cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job failed or did not report in.
 
-![A 16-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; the Monitor tab lists four jobs with their status and next expected ping](docs/screenshots/demo.gif)
+![A 16-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; the Monitor tab lists four jobs with their status (one failed with a non-zero exit status) and next expected ping](docs/screenshots/demo.gif)
 
 <sub>Recorded with Playwright from `cronplain serve` with four made-up jobs.</sub>
 
