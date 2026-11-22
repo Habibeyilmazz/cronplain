@@ -9,9 +9,12 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata" // IANA zones work even on machines without a zoneinfo database
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Habibeyilmazz/cronplain/internal/audit"
 	"github.com/Habibeyilmazz/cronplain/internal/monitor"
@@ -38,13 +41,14 @@ func main() {
 	}
 	var err error
 	code := 0
+	stdout := terminal{os.Stdout}
 	switch os.Args[1] {
 	case "explain":
-		code, err = runExplain(os.Args[2:], os.Stdout)
+		code, err = runExplain(os.Args[2:], stdout)
 	case "audit":
-		code, err = runAudit(os.Args[2:], os.Stdin, os.Stdout)
+		code, err = runAudit(os.Args[2:], os.Stdin, stdout)
 	case "serve":
-		code, err = runServe(os.Args[2:])
+		code, err = runServe(os.Args[2:], stdout)
 	case "version", "--version", "-v":
 		if bi, ok := debug.ReadBuildInfo(); ok && version == "dev" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 			version = bi.Main.Version // go install ...@latest stamps the module version
@@ -57,7 +61,7 @@ func main() {
 		code = 2
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "cronplain:", err)
+		fmt.Fprintln(terminal{os.Stderr}, "cronplain:", err)
 		if code == 0 {
 			code = 2
 		}
@@ -250,7 +254,7 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	return 0, nil
 }
 
-func runServe(args []string) (int, error) {
+func runServe(args []string, w io.Writer) (int, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	cfg := monitor.Config{}
 	fs.StringVar(&cfg.Addr, "addr", "127.0.0.1:4230", "listen address (loopback only: the dashboard has no login)")
@@ -265,5 +269,31 @@ func runServe(args []string) (int, error) {
 	if fs.NArg() > 0 {
 		return 2, fmt.Errorf("serve takes no arguments, got %q", fs.Args())
 	}
-	return 0, monitor.Serve(cfg, os.Stdout)
+	return 0, monitor.Serve(cfg, w)
+}
+
+// terminal writes to w with control characters other than newline and tab shown as
+// Go escapes (\x1b), so text echoed from a crontab, an expression or a ping URL
+// cannot move the cursor, retitle the window or hide earlier lines.
+type terminal struct{ w io.Writer }
+
+func (t terminal) Write(p []byte) (int, error) {
+	var b strings.Builder
+	for i := 0; i < len(p); {
+		r, size := utf8.DecodeRune(p[i:])
+		switch {
+		case r == utf8.RuneError && size == 1: // a lone 0x9b is CSI on 8-bit terminals
+			fmt.Fprintf(&b, `\x%02x`, p[i])
+		case unicode.IsControl(r) && r != '\n' && r != '\t':
+			q := strconv.QuoteRune(r)
+			b.WriteString(q[1 : len(q)-1])
+		default:
+			b.Write(p[i : i+size])
+		}
+		i += size
+	}
+	if _, err := io.WriteString(t.w, b.String()); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

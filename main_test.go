@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io"
 	"strings"
 	"testing"
 )
@@ -85,11 +86,11 @@ func TestAuditCommand(t *testing.T) {
 	if code, err := runAudit([]string{"-"}, strings.NewReader(big), &b); code != 2 || err == nil {
 		t.Errorf("oversized input: code %d err %v", code, err)
 	}
-	if code, _ := runServe([]string{"-not-a-flag"}); code != 2 {
+	if code, _ := runServe([]string{"-not-a-flag"}, io.Discard); code != 2 {
 		t.Errorf("serve with a bad flag: code %d", code)
 	}
 	// Asking for help is not an error.
-	if code, _ := runServe([]string{"-h"}); code != 0 {
+	if code, _ := runServe([]string{"-h"}, io.Discard); code != 0 {
 		t.Errorf("serve -h: code %d, want 0", code)
 	}
 	if code, _ := runAudit([]string{"--help"}, nil, &b); code != 0 {
@@ -97,5 +98,18 @@ func TestAuditCommand(t *testing.T) {
 	}
 	if code, _ := runExplain([]string{"-h"}, &b); code != 0 {
 		t.Errorf("explain -h: code %d, want 0", code)
+	}
+}
+
+// A crontab or expression from someone else must not drive the terminal: errors
+// such as `unknown macro @x\x1b]0;title\a` echo the input.
+func TestTerminalWriterEscapesControls(t *testing.T) {
+	var b strings.Builder
+	in := "line 2\terror \x1b[2J\x1b]0;pwn\a \x9b31m \xc2\x9b é ✓\r\n"
+	if n, err := (terminal{&b}).Write([]byte(in)); n != len(in) || err != nil {
+		t.Fatalf("Write = %d, %v; want %d, nil", n, err, len(in))
+	}
+	if want := `line 2` + "\t" + `error \x1b[2J\x1b]0;pwn\a \x9b31m \u009b é ✓\r` + "\n"; b.String() != want {
+		t.Errorf("got  %q\nwant %q", b.String(), want)
 	}
 }
