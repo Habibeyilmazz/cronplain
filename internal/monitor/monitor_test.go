@@ -255,13 +255,12 @@ func (c *clock) now() time.Time  { c.mu.Lock(); defer c.mu.Unlock(); return c.t 
 func (c *clock) set(t time.Time) { c.mu.Lock(); c.t = t; c.mu.Unlock() }
 
 type harness struct {
-	srv     *httptest.Server
-	s       *Server
-	clock   *clock
-	alerts  chan Alert
-	ntfy    chan string
-	out     *bytes.Buffer
-	handler http.Handler
+	srv    *httptest.Server
+	s      *Server
+	clock  *clock
+	alerts chan Alert
+	ntfy   chan string
+	out    *bytes.Buffer
 }
 
 func newHarness(t *testing.T) *harness {

@@ -19,6 +19,7 @@ You need Go 1.26.11 or newer. No C compiler is needed.
 go test -race ./...          # unit tests (table-driven; most live in internal/sched)
 gofmt -l .                   # must print nothing
 go vet ./...
+go test -run X -bench . ./internal/sched  # timing of explain, incl. rare and never-firing schedules
 go run . explain "0 9 * * 1" # try a change
 go run . serve               # web UI on http://127.0.0.1:4230
 ```
