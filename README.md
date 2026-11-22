@@ -93,7 +93,9 @@ Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user
 
 ### Heartbeat monitor
 
-![Monitor tab listing three jobs, one late, with their ping URLs](docs/screenshots/monitor.png)
+![Monitor tab in dark mode: four jobs, one late, one waiting for its first ping, with the ping command above the table](docs/screenshots/monitor.png)
+
+<img src="docs/screenshots/monitor-mobile.png" width="260" align="right" alt="The same monitor on a 390px-wide phone: each job is a card with its status, schedule, last ping, next expected ping and Copy ping and Delete buttons">
 
 ```sh
 cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
@@ -107,6 +109,9 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state`, `schedule`, `due`, `last_ping`, `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
 Jobs and ping times live in one SQLite file (`-db`). Pings accept `GET`, `POST` or `HEAD`.
 Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
+The page follows the system light or dark theme, works at phone width, and is usable from the keyboard alone.
+
+<br clear="right">
 
 The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat).
 

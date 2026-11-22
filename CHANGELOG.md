@@ -14,6 +14,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fuzz tests for `sched.Explain` and `audit.Run` (they found and fixed a panic on a bare `TZ=` prefix).
 - CI (gofmt, vet, race tests, cross-builds) and a tag-triggered goreleaser workflow. No tag or release has been created.
 
+### Changed (design round 2)
+- Descriptions name clock times for one block of hours: `*/15 9-17 * * 1-5` reads "Every 15 minutes from 09:00 through 17:45 on Monday through Friday" (was "during hours 9 through 17").
+- Zones without a name are printed once: `09:00 +03:00` instead of `09:00 +03 (+03:00)` (CLI and web).
+- Web explainer: an empty input shows a prompt and an invalid one shows only the error (the input gets a red border and `aria-invalid`); before, both left stale or empty result columns. A stopped server is reported as such, not as an invalid schedule.
+- Web monitor: failed loads, adds and deletes are reported in the page; the Ping URL column, which wrapped mid-word, was replaced by the ping command in the intro and a "Copy ping" button (falls back to a `prompt()` when the clipboard is blocked). Status, times and buttons no longer wrap; on phones both buttons sit on one row and "Add job" spans the form.
+- Navigation is two links with `aria-current` (the old `tablist` had no arrow-key support); the brand is now the page `h1`. axe-core reports no violations in light/dark at 1280px and 390px.
+- README screenshots retaken from the running app (desktop light, desktop dark, 390px phone).
+
 ### Fixed (first-run review, round 1)
 - `cronplain audit /etc/crontab -system` (the README quickstart) failed with "audit needs one file": flags may now follow the arguments. A pasted `- cron: '...'` line is no longer read as a flag.
 - Monitor raised a false "late" alert every autumn for fixed-time jobs: when DST ends cron runs them once, but the second pass through the repeated hour was expected to ping. Wildcard jobs (`*/15`) still are, as cron runs them twice.
@@ -32,4 +40,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `sched.Run.Again` marks the second instant of a repeated wall time; `monitor.Status` skips it for fixed-time jobs only.
 - The brief mentioned a shared TypeScript explainer; it was not built. The web page calls the Go engine over `/api/explain`, so there is one implementation of the schedule math. A static offline page would need a port or a WASM build.
 - Round 1 ran a Codex review of `internal/monitor`, `internal/sched` and `main.go`; all eight findings were checked by reproducing them and fixed (see Fixed).
-- Screenshots in `docs/screenshots/` were taken with Playwright against a running `cronplain serve`.
+- Screenshots in `docs/screenshots/` were taken with Playwright (Chromium) against a running `cronplain serve -addr 127.0.0.1:4230` with synthetic jobs; `monitor.png` is the dark theme, `monitor-mobile.png` a 390x844 viewport at 2x.
+- Web UI is one file, `internal/monitor/web/index.html` (no build step). Sections are chosen by the URL hash; panel ids are `panel-explain`/`panel-monitor` so the hash does not scroll the page.
