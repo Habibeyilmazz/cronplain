@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (feature round 7)
+- Failure pings. A job that ran on time but failed was noticed only when its *next* run was overdue (a day later for a daily job), because `cmd && curl .../ping/ID` simply sent nothing. Ending the crontab line with `; curl -fsS http://127.0.0.1:4230/ping/ID/$?` now reports the exit status: `/ping/ID/0` (or plain `/ping/ID`) is a success, `/ping/ID/1` to `/ping/ID/255` and `/ping/ID/fail` mark the job **failed** and alert at once (terminal, webhook with `"state":"failed"` and `exit_status`, ntfy titled "JOB failed"). A job that keeps failing alerts only on the first failure of a streak, or again after a late alert; the next success sends "recovered". The next ping is then expected after the next scheduled run, as for a success. Anything else after `/ping/ID/` (`256`, `-1`, `ok`) is a 404 with the accepted forms.
+- Dashboard: a red "Failed" status, "failed N min ago" under the last success (the column is now called "Last success"), the intro and the "Added" message show the `; curl .../ping/ID/$?` form, and "Copy ping" copies `curl -fsS .../ping/ID/$?`. `monitor.png` and `monitor-mobile.png` retaken from the running app with a failed job.
+- Databases from earlier versions gain a `last_fail` column when `serve` opens them (tested against a database with the old schema).
+
+### Changed (feature round 7)
+- The "recovered" message reads "job X succeeded again and is back on schedule" (was "pinged again"), since a failure is also a ping now.
+
 ### Fixed (launch round 6)
 - A failed webhook or ntfy alert was lost: it was tried once and only logged. Network errors, HTTP 429 and 5xx are now retried in the background after 30 s, 2 min and 10 min (then "giving up after 4 attempts" is logged); other 4xx answers are final. The first attempt is unchanged and still synchronous. Retries pending when `serve` stops are lost (noted in the code as a shortcut).
 - Pasting a workflow snippet (`on:` / `schedule:` / `- cron: '...'` on separate lines) failed with a systemd error ("two time parts"). `explain`, `/api/explain` and monitor jobs now use its one `cron:` line; several `cron:` lines, or several plain lines, get a clear error. In the web page the schedule fields pick the `cron:` line on paste, because a one-line input drops the newlines (reproduced in Chromium first; the Playwright journey covers it).
@@ -71,6 +79,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Recovered webhook alerts no longer carry a zero `due` time.
 
 ### Notes for the next person
+- Round 7 (feature) picked failure pings after using the monitor: with only success pings a failing daily job stays "On time" for up to a day. `Store.Ping`/`Store.Fail` share `Store.record`; `Job.LastFail` is cleared by every success, so "failed" is simply `LastFail != nil` (no timestamp comparison at one-second resolution). `Status` measures the next due time from the later of the last success and the last failure. The Codex review was not run this round either (usage limit until after the deadline); the diff was reviewed by hand and covered by `TestFailurePings`, `TestOpenStoreAddsLastFail`, new `TestStatus` rows and the Playwright journey (which now reports exit status 2, then 0).
+- `docs/screenshots/demo.gif` still shows the old monitor intro text ("Each job calls curl ... when it succeeds"); the usage it shows still works. Re-record it when convenient.
 - Round 5 (reliability) also tried and found fine: empty/whitespace/oversized expressions, full-width digits, NBSP between fields, `-n`/`-tz`/`-check-every` bounds, a directory or non-SQLite file as `-db`, Santiago's midnight DST and Lord Howe's 30-minute DST, years up to 2199, never-firing schedules (each `/api/explain` under 50 ms), audit fuzzing (20 s) and explain fuzzing (30 s).
 - Known and left alone: `TZ=A CRON_TZ=B expr` (both prefixes, in that order) gives a confusing error. (Round 6 fixed the other two items that were here: alert retries and multi-line YAML pastes.)
 - Round 6 (launch) left as is: the TypeScript explainer (see the note below; the README roadmap lists a static build), and AWS `L-n`/`LW` (cronplain parses them and says to check; no AWS account was used to confirm). Private vulnerability reporting is off; turning it on is a repository setting for the owner.

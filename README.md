@@ -4,7 +4,7 @@
 
 **Know when your scheduled jobs really run, and hear about it when they don't.**
 
-cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job did not report in.
+cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job failed or did not report in.
 
 ![A 16-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; the Monitor tab lists four jobs with their status and next expected ping](docs/screenshots/demo.gif)
 
@@ -104,20 +104,30 @@ Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user
 
 ### Heartbeat monitor
 
-![Monitor tab in dark mode: four jobs, one late, one waiting for its first ping, with the ping command above the table](docs/screenshots/monitor.png)
+![Monitor tab in dark mode: four jobs, one failed a minute ago, one late, one waiting for its first ping, with the ping command above the table](docs/screenshots/monitor.png)
 
-<img src="docs/screenshots/monitor-mobile.png" width="260" align="right" alt="The same monitor on a 390px-wide phone: each job is a card with its status, schedule, last ping, next expected ping and Copy ping and Delete buttons">
+<img src="docs/screenshots/monitor-mobile.png" width="260" align="right" alt="The same monitor on a 390px-wide phone: each job is a card with its status, schedule, last success, next expected ping and Copy ping and Delete buttons">
 
 ```sh
 cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 ```
 
 1. Open `http://127.0.0.1:4230`, switch to **Monitor** and add a job: a name, its schedule (any syntax above), its time zone and a grace period.
-2. Make the job report success, for example in a crontab:
-   `0 3 * * * /opt/bin/backup && curl -fsS http://127.0.0.1:4230/ping/nightly-backup`
-3. If no ping arrives by *the first scheduled run after the last ping + grace*, cronplain alerts once, and again with "recovered" when the next ping arrives. When DST ends and an hour repeats, a fixed-time job is expected only once, because cron runs it only once.
+2. Make the job report each run with its exit status, for example in a crontab:
+   `0 3 * * * /opt/bin/backup; curl -fsS http://127.0.0.1:4230/ping/nightly-backup/$?`
+3. Exit status 0 counts as a success. Anything from 1 to 255 marks the job **failed** and alerts at once, instead of a day later when the next run is missed. A job that keeps failing alerts only on its first failure.
+4. If no ping arrives by *the first scheduled run after the last ping + grace*, the job is **late** and cronplain alerts once. When DST ends and an hour repeats, a fixed-time job is expected only once, because cron runs it only once.
+5. The next success after a failure or a late alert sends "recovered".
 
-Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state`, `schedule`, `due`, `last_ping`, `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
+| Ping URL | Means |
+|---|---|
+| `/ping/ID` or `/ping/ID/0` | the run succeeded |
+| `/ping/ID/1` ... `/ping/ID/255` | the run failed with that exit status |
+| `/ping/ID/fail` | the run failed (for scripts that do not pass `$?`) |
+
+The older form `cmd && curl -fsS .../ping/ID` still works; it only reports successes, so a failure shows up as "late" at the next run.
+
+Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state` (`late`, `failed` or `recovered`), `schedule` and `due` (on `late`), `last_ping`, `exit_status` (on `failed` from `/ping/ID/N`) and `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
 Jobs and ping times live in one SQLite file (`-db`, created readable by your user only). A failed webhook or ntfy delivery (network error, HTTP 429 or 5xx) is logged and retried in the background after 30 s, 2 min and 10 min; other 4xx answers are not retried, and retries still pending when `serve` stops are lost. The terminal line is always written. Pings accept `GET`, `POST` or `HEAD`.
 Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
 The page follows the system light or dark theme, works at phone width, and is usable from the keyboard alone.
@@ -161,7 +171,7 @@ Use cronplain when you want all of this offline in one binary: check a schedule 
 Ideas, not promises:
 
 - Optional token so pings can come from other machines through a reverse proxy.
-- A `/ping/<id>/fail` endpoint and a short ping history per job.
+- A short ping history per job, and a `/start` ping to measure how long a run takes.
 - A static, offline build of the explainer page (today it is served by `cronplain serve`; the schedule math exists only in Go, so this needs a WebAssembly build or a port).
 - Explaining several `cron:` lines of one workflow at once (today a pasted snippet must have exactly one).
 
