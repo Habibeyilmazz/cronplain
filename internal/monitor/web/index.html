@@ -63,7 +63,7 @@ input, select { font: inherit; color: var(--ink); background: var(--sheet); bord
 .error { color: var(--late); font-weight: 600; }
 
 .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; padding-bottom: 48px; }
-@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } .cols .notes { order: -1; } }
 h2 { font-size: 17px; margin: 0 0 10px; }
 .timetable { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
 .timetable table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -83,13 +83,13 @@ h2 { font-size: 17px; margin: 0 0 10px; }
 /* Monitor */
 .intro { color: var(--muted); max-width: 46em; margin: 28px 0 20px; }
 .jobs { width: 100%; border-collapse: collapse; background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; font-size: 15px; }
-.jobs th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.jobs th { white-space: nowrap; text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
 .jobs td { padding: 12px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
 .jobs tr:last-child td { border-bottom: 0; }
 .jobs code { font: 14px var(--mono); }
 .jobs .desc { color: var(--muted); font-size: 14px; }
 .state { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
-.state::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.state::before { content: ""; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .state.up::before { background: var(--up); }
 .state.late { color: var(--late); }
 .state.late::before { background: var(--late); }
@@ -110,6 +110,8 @@ form.add input { width: 100%; }
   .jobs, .jobs tbody, .jobs tr, .jobs td { display: block; width: 100%; }
   .jobs tr { border-bottom: 1px solid var(--rule); }
   .jobs td { border: 0; padding: 6px 14px; }
+  .jobs td[data-label]::before { content: attr(data-label); color: var(--muted); }
+  .jobs td[data-label] .desc { display: inline; margin-left: 6px; }
 }
 [hidden] { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -298,7 +300,7 @@ function until(iso) {
   if (s < 172800) return "in " + Math.round(s / 3600) + " h";
   return "in " + Math.round(s / 86400) + " days";
 }
-const stateText = { up: "On time", late: "Late", new: "Waiting for first ping", never: "Never runs again" };
+const stateText = { up: "On time", late: "Late", new: "Waiting", never: "Never runs again" };
 async function loadJobs() {
   let jobs;
   try { jobs = await (await fetch("/api/jobs")).json(); } catch (e) { return; }
@@ -306,16 +308,16 @@ async function loadJobs() {
     $("#jobs").innerHTML = `<div class="empty">No jobs yet. Add one below, then end the job's crontab line with <code>&amp;&amp; curl -fsS ${esc(location.origin)}/ping/NAME</code>.</div>`;
     return;
   }
-  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th>Ping command</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
+  $("#jobs").innerHTML = `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last ping</th><th>Ping expected by</th><th>Ping URL</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
       const cmd = `curl -fsS ${location.origin}${j.ping_path}`;
       const due = j.due ? new Date(j.due) : null;
       return `<tr>
-        <td><span class="state ${esc(j.state)}">${esc(stateText[j.state] || j.state)}</span></td>
-        <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)} ${esc(j.tz)}, grace ${Math.round(j.grace_seconds / 60)} min</div></td>
-        <td title="${esc(j.last_ping || "")}">${esc(ago(j.last_ping))}</td>
-        <td>${due ? `<span title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
-        <td><div class="curl"><code>${esc(cmd)}</code><button class="btn" type="button" data-copy="${esc(cmd)}">Copy</button></div></td>
+        <td><span class="state ${esc(j.state)}"${j.state === "new" ? ' title="No ping yet; the first one is expected by the time shown"' : ""}>${esc(stateText[j.state] || j.state)}</span></td>
+        <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)}<br>${esc(j.tz)}, ${Math.round(j.grace_seconds / 60)} min grace</div></td>
+        <td data-label="Last ping: " title="${esc(j.last_ping || "")}">${esc(ago(j.last_ping))}</td>
+        <td data-label="Ping expected by: ">${due ? `<span title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
+        <td><div class="curl"><code title="${esc(cmd)}">${esc(j.ping_path)}</code><button class="btn" type="button" data-copy="${esc(cmd)}" aria-label="Copy the curl command for ${esc(j.id)}">Copy curl</button></div></td>
         <td><button class="btn danger" type="button" data-del="${esc(j.id)}">Delete</button></td>
       </tr>`;
     }).join("") + `</tbody></table>`;
@@ -324,7 +326,7 @@ $("#jobs").addEventListener("click", async (e) => {
   const c = e.target.closest("[data-copy]"), d = e.target.closest("[data-del]");
   if (c) {
     try { await navigator.clipboard.writeText(c.dataset.copy); c.textContent = "Copied"; } catch (err) { c.textContent = "Select and copy"; }
-    setTimeout(() => (c.textContent = "Copy"), 1500);
+    setTimeout(() => (c.textContent = "Copy curl"), 1500);
   }
   if (d && confirm(`Delete job "${d.dataset.del}"? Its ping history is lost.`)) {
     await fetch("/api/jobs/" + encodeURIComponent(d.dataset.del), { method: "DELETE" });
@@ -346,6 +348,7 @@ $("#add").addEventListener("submit", async (e) => {
 setInterval(() => { if (!$("#monitor").hidden) loadJobs(); }, 10000);
 
 show(location.hash === "#monitor" ? "monitor" : "explain");
+addEventListener("hashchange", () => show(location.hash === "#monitor" ? "monitor" : "explain"));
 explain();
 </script>
 </body>

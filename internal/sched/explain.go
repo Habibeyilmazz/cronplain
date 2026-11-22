@@ -38,7 +38,7 @@ func Explain(expr string, d Dialect, display *time.Location, n int, from time.Ti
 		eval = s.Location
 	}
 	e := &Explanation{Expr: s.Expr, Dialect: s.Dialect, Description: s.Describe(),
-		Zone: eval.String(), DisplayZone: display.String(), Runs: []RunView{}, DST: []string{}, Lints: s.Lints(from)}
+		Zone: eval.String(), DisplayZone: display.String(), Runs: []RunView{}, DST: []string{}, Lints: append([]Lint{}, s.Lints(from)...)}
 	if s.Location != nil && eval.String() != display.String() {
 		e.Description = strings.TrimSuffix(e.Description, ".") + " (" + eval.String() + " time)."
 	}

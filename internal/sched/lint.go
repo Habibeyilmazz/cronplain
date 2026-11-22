@@ -79,7 +79,7 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 	case GitHubActions:
 		info("GitHub Actions evaluates schedules in UTC.")
 		if gap > 0 && gap < 5*time.Minute {
-			warn("GitHub Actions runs scheduled workflows at most once every 5 minutes; runs closer together are dropped.")
+			warn("GitHub Actions does not run scheduled workflows more often than once every 5 minutes.")
 		}
 		if s.min.has(0) {
 			info("Minute 0 is the busiest time on GitHub Actions and runs are often delayed or dropped; an odd minute such as 17 is more punctual.")

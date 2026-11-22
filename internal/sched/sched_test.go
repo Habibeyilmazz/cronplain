@@ -270,7 +270,7 @@ func TestLints(t *testing.T) {
 		{"0 0 29 2 *", Cron, []string{"February except in leap years"}, nil},
 		{"*/7 * * * *", Cron, []string{"gap between 56 and 0 is 4, not 7"}, nil},
 		{"*/15 * * * *", Cron, nil, []string{"gap between"}},
-		{"*/2 * * * *", GitHubActions, []string{"at most once every 5 minutes", "UTC", "Minute 0 is the busiest"}, nil},
+		{"*/2 * * * *", GitHubActions, []string{"more often than once every 5 minutes", "UTC", "Minute 0 is the busiest"}, nil},
 		{"17 3 * * *", GitHubActions, []string{"60 days"}, []string{"busiest", "5 minutes"}},
 		{"@hourly", Cron, []string{`shorthand for "0 * * * *"`}, nil},
 		{"0 0 * * 7", Cron, []string{"7 means Sunday"}, nil},
