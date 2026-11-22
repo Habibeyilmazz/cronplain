@@ -241,6 +241,11 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "use GET, POST or HEAD", http.StatusMethodNotAllowed)
 		return
 	}
+	// Jobs ping with curl; a browser sending this header was sent here by another site.
+	if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+		http.Error(w, "pings from web pages are not accepted", http.StatusForbidden)
+		return
+	}
 	id := r.PathValue("id")
 	s.mu.Lock()
 	wasLate, err := s.store.Ping(id, s.now())

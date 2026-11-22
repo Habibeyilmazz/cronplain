@@ -73,4 +73,11 @@ func TestAuditCommand(t *testing.T) {
 	if code, _ := runAudit([]string{"does-not-exist"}, nil, &b); code != 2 {
 		t.Errorf("missing file: code %d", code)
 	}
+	big := strings.Repeat("#\n", 3<<20) + "61 * * * * /bin/true\n"
+	if code, err := runAudit([]string{"-"}, strings.NewReader(big), &b); code != 2 || err == nil {
+		t.Errorf("oversized input: code %d err %v", code, err)
+	}
+	if code, _ := runServe([]string{"-not-a-flag"}); code != 2 {
+		t.Errorf("serve with a bad flag: code %d", code)
+	}
 }

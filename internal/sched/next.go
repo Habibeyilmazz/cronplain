@@ -134,6 +134,10 @@ func resolve(y int, m time.Month, d, h, mi, sec int, loc *time.Location) []time.
 	return out
 }
 
+// FixedTime reports whether minute and hour are fixed values: cron runs such jobs
+// once when DST repeats an hour, and jobs with a wildcard or range in both passes.
+func (s *Schedule) FixedTime() bool { return singles(s.min) && singles(s.hour) }
+
 // Next returns up to n runs strictly after from, evaluated in loc
 // (or in the schedule's own zone when the expression fixes one).
 // Wall-clock semantics: a time inside a DST gap does not fire, a time inside

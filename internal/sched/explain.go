@@ -54,7 +54,7 @@ func Explain(expr string, d Dialect, display *time.Location, n int, from time.Ti
 			Abbrev: abbr, Offset: t.Format("-07:00"), Repeated: r.Repeated})
 	}
 	if len(runs) > 0 {
-		fixed := singles(s.min) && singles(s.hour)
+		fixed := s.FixedTime()
 		quiet := 0
 		for _, ev := range s.DSTEvents(from, runs[len(runs)-1].Time, eval) {
 			if ev.AffectedNum == 0 {

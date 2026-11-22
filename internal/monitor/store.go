@@ -178,10 +178,10 @@ func Status(j Job, s *sched.Schedule, loc *time.Location, now time.Time) (State,
 	if len(runs) == 0 {
 		return StateNever, time.Time{}
 	}
-	// When DST ends, cron and systemd run a fixed-time job once, so do not expect a
-	// ping for the second pass through the repeated hour.
-	// shortcut: looks at most 64 runs ahead, so every-second schedules may still alert in that hour.
-	if runs[0].Again {
+	// When DST ends, cron runs a fixed-time job once, so do not expect a ping for
+	// the second pass through the repeated hour (wildcard jobs do run twice).
+	// shortcut: looks at most 64 runs ahead, enough for any fixed minute and hour list.
+	if runs[0].Again && s.FixedTime() {
 		for _, r := range s.Next(base, loc, 64) {
 			if !r.Again {
 				runs[0] = r

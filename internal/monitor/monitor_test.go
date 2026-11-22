@@ -57,19 +57,21 @@ func TestStatus(t *testing.T) {
 	if !due.Equal(ts(t, "2027-03-15T02:30:00-04:00")) {
 		t.Errorf("DST due = %s", due)
 	}
-	// DST ends: cron runs a 01:30 job once, so after the first 01:30 ping the next is due the day after.
+	// DST ends: cron runs a 01:30 job once, so after the first 01:30 ping the next is due the day after,
+	// but it runs a */15 job in both passes through 01:00-02:00.
 	fallback, _ := sched.Parse("30 1 * * *", sched.Cron)
 	quarter, _ := sched.Parse("*/15 * * * *", sched.Cron)
 	for _, c := range []struct {
 		s              *sched.Schedule
 		ping, now, due string
+		want           State
 	}{
-		{fallback, "2027-11-07T01:31:00-04:00", "2027-11-07T01:40:00-05:00", "2027-11-08T01:30:00-05:00"},
-		{quarter, "2027-11-07T01:46:00-04:00", "2027-11-07T01:20:00-05:00", "2027-11-07T02:00:00-05:00"},
+		{fallback, "2027-11-07T01:31:00-04:00", "2027-11-07T01:40:00-05:00", "2027-11-08T01:30:00-05:00", StateUp},
+		{quarter, "2027-11-07T01:46:00-04:00", "2027-11-07T01:20:00-05:00", "2027-11-07T01:00:00-05:00", StateLate},
 	} {
 		state, due := Status(Job{LastPing: ptr(c.ping)}, c.s, ny, ts(t, c.now))
-		if state != StateUp || !due.Equal(ts(t, c.due)) {
-			t.Errorf("fall back %s: got %s %s, want up %s", c.s.Expr, state, due.Format(time.RFC3339), c.due)
+		if state != c.want || !due.Equal(ts(t, c.due)) {
+			t.Errorf("fall back %s: got %s %s, want %s %s", c.s.Expr, state, due.Format(time.RFC3339), c.want, c.due)
 		}
 	}
 }
@@ -255,6 +257,10 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if code, _ = h.do(t, "GET", "/ping/nope", "", nil); code != 404 {
 		t.Errorf("unknown ping: %d", code)
+	}
+	// A web page cannot fake a heartbeat through the visitor's browser (e.g. an <img> tag).
+	if code, _ = h.do(t, "GET", "/ping/backup", "", map[string]string{"Sec-Fetch-Site": "cross-site"}); code != 403 {
+		t.Errorf("cross-site ping: %d, want 403", code)
 	}
 
 	if code, _ = h.do(t, "DELETE", "/api/jobs/backup", "", nil); code != 204 {

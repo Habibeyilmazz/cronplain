@@ -43,7 +43,7 @@ func main() {
 	case "audit":
 		code, err = runAudit(os.Args[2:], os.Stdin, os.Stdout)
 	case "serve":
-		err = runServe(os.Args[2:])
+		code, err = runServe(os.Args[2:])
 	case "version", "--version", "-v":
 		if bi, ok := debug.ReadBuildInfo(); ok && version == "dev" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 			version = bi.Main.Version // go install ...@latest stamps the module version
@@ -204,9 +204,13 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 		defer f.Close()
 		r = f
 	}
-	data, err := io.ReadAll(io.LimitReader(r, 4<<20))
+	const maxSize = 4 << 20
+	data, err := io.ReadAll(io.LimitReader(r, maxSize+1))
 	if err != nil {
 		return 2, err
+	}
+	if len(data) > maxSize {
+		return 2, fmt.Errorf("%s is larger than 4 MiB; that is not a crontab", pos[0])
 	}
 	rep := audit.Run(string(data), audit.Options{System: *system, Location: loc, From: time.Now()})
 	if *asJSON {
@@ -224,7 +228,7 @@ func runAudit(args []string, stdin io.Reader, w io.Writer) (int, error) {
 	return 0, nil
 }
 
-func runServe(args []string) error {
+func runServe(args []string) (int, error) {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	cfg := monitor.Config{}
 	fs.StringVar(&cfg.Addr, "addr", "127.0.0.1:4230", "listen address (loopback only: the dashboard has no login)")
@@ -234,10 +238,10 @@ func runServe(args []string) error {
 	fs.StringVar(&cfg.NtfyServer, "ntfy-server", "https://ntfy.sh", "ntfy server")
 	fs.DurationVar(&cfg.Every, "check-every", 30*time.Second, "how often to check for late jobs")
 	if err := fs.Parse(args); err != nil {
-		return nil
+		return 2, nil
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("serve takes no arguments, got %q", fs.Args())
+		return 2, fmt.Errorf("serve takes no arguments, got %q", fs.Args())
 	}
-	return monitor.Serve(cfg, os.Stdout)
+	return 0, monitor.Serve(cfg, os.Stdout)
 }
