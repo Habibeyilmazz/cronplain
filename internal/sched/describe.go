@@ -201,6 +201,8 @@ func (s *Schedule) datePart() string {
 		var ys []string
 		for _, it := range s.yearItems {
 			switch {
+			case it.star:
+				ys = append(ys, fmt.Sprintf("every %s year from %d", ordinal(it.step), it.lo))
 			case it.lo == it.hi:
 				ys = append(ys, num(it.lo))
 			case it.step == 1:

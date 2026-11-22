@@ -75,7 +75,7 @@ func (s *Schedule) parseSystemd(text string) error {
 	if err != nil {
 		return err
 	}
-	if !yf.star {
+	if !every(yf) {
 		s.yearItems, s.years = yf.items, expandYears(yf.items)
 	}
 	if s.month, err = parseField(dots(parts[1]), monSpec); err != nil {

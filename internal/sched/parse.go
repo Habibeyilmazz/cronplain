@@ -182,13 +182,17 @@ func detect(text string) Dialect {
 		return Systemd
 	}
 	for _, f := range fields {
-		if strings.ContainsAny(f, ":~") || strings.Contains(f, "..") || strings.Count(f, "-") >= 2 {
+		// systemd has at most 4 parts (weekday date time zone); cron lists such as 1-2,4-5 also have two dashes
+		if strings.ContainsAny(f, ":~") || strings.Contains(f, "..") || (strings.Count(f, "-") >= 2 && len(fields) < 5) {
 			return Systemd
 		}
 	}
+	quartzDay := func(t string) bool {
+		return strings.ContainsAny(t, "?#") || (strings.ContainsAny(strings.ToUpper(t), "LW") && !isNameField(t))
+	}
 	switch len(fields) {
 	case 6:
-		if strings.ContainsAny(fields[3]+fields[5], "?LW#") {
+		if quartzDay(fields[3]) || quartzDay(fields[5]) {
 			return Quartz
 		}
 		return CronSeconds
@@ -271,7 +275,7 @@ func (s *Schedule) parseCron(text string) error {
 			if err != nil {
 				return err
 			}
-			if !yf.star {
+			if !every(yf) {
 				s.yearItems = yf.items
 				s.years = expandYears(yf.items)
 			}
@@ -465,7 +469,7 @@ func parseField(t string, sp spec) (field, error) {
 			if err != nil || n < 1 {
 				return f, fmt.Errorf("%s: step %q must be a positive number", sp.name, stepText)
 			}
-			if n > sp.hi-sp.lo+1 && sp.name != "year" {
+			if n > sp.hi-sp.lo+1 {
 				return f, fmt.Errorf("%s: step %d is larger than the field range %d-%d", sp.name, n, sp.lo, sp.hi)
 			}
 			it.step = n
