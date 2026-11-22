@@ -36,6 +36,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Web monitor: failed loads, adds and deletes are reported in the page; the Ping URL column, which wrapped mid-word, was replaced by the ping command in the intro and a "Copy ping" button (falls back to a `prompt()` when the clipboard is blocked). Status, times and buttons no longer wrap; on phones both buttons sit on one row and "Add job" spans the form.
 - Navigation is two links with `aria-current` (the old `tablist` had no arrow-key support); the brand is now the page `h1`. axe-core reports no violations in light/dark at 1280px and 390px.
 - README screenshots retaken from the running app (desktop light, desktop dark, 390px phone).
+- Round 4: `explain.png` retaken (new AWS label and example button).
 
 ### Fixed (first-run review, round 1)
 - `cronplain audit /etc/crontab -system` (the README quickstart) failed with "audit needs one file": flags may now follow the arguments. A pasted `- cron: '...'` line is no longer read as a flag.
