@@ -90,6 +90,22 @@ func phrase(f field, unit, units string, name func(int) string) string {
 	return units + " " + text
 }
 
+// cyclic describes a day-of-week or month field. A step there restarts every week
+// or year (*/2 is Sunday, Tuesday, Thursday, Saturday, then Sunday again), so
+// "every 2 days" would be wrong: name the values instead.
+func cyclic(f field, unit, units string, name func(int) string) string {
+	for _, it := range f.items {
+		if it.step > 1 {
+			var names []string
+			for _, v := range f.values() {
+				names = append(names, name(v))
+			}
+			return join(names)
+		}
+	}
+	return phrase(f, unit, units, name)
+}
+
 func num(v int) string { return strconv.Itoa(v) }
 
 func isNum(f func(int) string) bool { return f(7) == "7" }
@@ -192,7 +208,7 @@ func (s *Schedule) datePart() string {
 		dom = append(dom, fmt.Sprintf("on the weekday nearest day %d of the month", n))
 	}
 	if !every(s.dow) && len(s.dow.items) > 0 {
-		dw = append(dw, "on "+phrase(s.dow, "day", "days", dow))
+		dw = append(dw, "on "+cyclic(s.dow, "day", "days", dow))
 	}
 	for _, w := range s.lastDow {
 		dw = append(dw, "on the last "+dayName[w]+" of the month")
@@ -208,7 +224,7 @@ func (s *Schedule) datePart() string {
 		parts = append(parts, append(dom, dw...)...)
 	}
 	if !every(s.month) {
-		parts = append(parts, "in "+phrase(s.month, "month", "months", monthName))
+		parts = append(parts, "in "+cyclic(s.month, "month", "months", monthName))
 	}
 	if s.years != nil {
 		var ys []string

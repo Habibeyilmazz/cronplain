@@ -175,7 +175,13 @@ func TestDescribe(t *testing.T) {
 		"cron(0/30 20-2 ? * MON-FRI *)": "Every 30 minutes during hours 20 through 2 on Monday through Friday.",
 		"cron(0 22-2/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 2.",
 		"cron(0 22-0/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 23.",
-		"@reboot":                       "Once, when the cron daemon starts (usually at boot). It has no calendar times.",
+		// a step in weekdays or months restarts every week or year, so name the values
+		"0 0 * * */2":    "At 00:00 on Sunday, Tuesday, Thursday and Saturday.",
+		"0 0 * * 1-5/2":  "At 00:00 on Monday, Wednesday and Friday.",
+		"0 0 12 ? * 1/2": "At 12:00 on Sunday, Tuesday, Thursday and Saturday.",
+		"0 0 1 */3 *":    "At 00:00 on day 1 of the month, in January, April, July and October.",
+		"0 0 * 2-12/5 *": "At 00:00 every day in February, July and December.",
+		"@reboot":        "Once, when the cron daemon starts (usually at boot). It has no calendar times.",
 	}
 	for expr, want := range cases {
 		s, err := Parse(expr, Auto)
