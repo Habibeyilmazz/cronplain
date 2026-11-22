@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (first-run review, round 9; each reproduced from a fresh clone first)
+- The README's own ping line, `cmd; curl -fsS http://127.0.0.1:4230/ping/ID/$?`, made cron send one email per run: the ping answered `OK`, curl printed it, and cron mails any output. A ping now answers 200 with an empty body, so a working ping prints nothing; a failed one (unknown job, `serve` down) still prints curl's error.
+- A stepped day-of-week or month read wrong: `0 0 * * */2` was "on every 2 days", but it runs Sunday, Tuesday, Thursday and Saturday (Saturday to Sunday is one day); `1-5/2` was "every 2 days from Monday through Friday". Both fields now list their days or months (`*/3` in months: "in January, April, July and October").
+- Pasting a whole crontab line (`0 3 * * * /opt/bin/backup >> log 2>&1`, `@daily /usr/bin/x`), the most common first paste, failed with "cron expressions have 5 fields, got 9", or a Quartz or "step x" error for 6 or 7 words. The error now names the schedule part and points to `cronplain audit` for whole lines (CLI, web page and monitor jobs).
+- `cronplain explain 0 9 * * 1` typed without quotes (the shell turns `*` into file names) failed with "got 33 fields"; the error now names the file it saw and says to quote the expression.
+- `cronplain explain -h` (and `audit`, `serve`) exited 2 after printing the help; asking for help now exits 0.
+- `serve` printed the database as `cronplain.db`; it now prints the full path, and the README says the default is relative to the current directory (start `serve` elsewhere and the jobs seem gone).
+- Dashboard: a refused job name only said "Please match the requested format."; the field now says lowercase letters, digits, `-` and `_`.
+
+### Notes for the next person (round 9)
+- Fresh clone, README quickstart (`go build`, `audit examples/crontab.sample`, `explain`, `go install ...@latest` into a scratch `GOBIN`), `serve` with the API and the dashboard walked in Playwright, and the e2e suite all worked; `audit /etc/crontab -system` fails on macOS only because the file does not exist there.
+- Checked by running, not changed: a brute-force Python matcher (Vixie OR rule and `*`-prefix rule, DST gaps and overlaps) agreed with `explain -json` on 640 random 5-field crontab expressions in UTC, America/New_York, Europe/Berlin and Europe/Istanbul; another agreed on 300 random Quartz `L`, `L-n`, `nW`, `LW`, `nL`, `n#k` expressions. systemd shorthands (`weekly`, `quarterly`, `semiannually`, ...) match systemd's documented meanings. The scripts were run from a scratch folder, not added.
+- Known and left: `cmd 2>/dev/null` (stdout still mailed) and `a > log; b` (b's output mailed) are not flagged by `audit`; `0 9-10/5 * * *` reads "every 5 hours from 9 through 10" although it is only 09:00. Reported gaps unchanged: a retry that fails at shutdown is lost (documented `shortcut:`), no TypeScript explainer, AWS `L-n`/`LW` unverified, no gzip. Codex review hit its usage limit again.
+
 ### Fixed (performance and accessibility round 8; measured before and after)
 - Dashboard: the job list refreshes every 10 s by replacing the table, which threw keyboard focus on "Copy ping" or "Delete" back to the top of the page every 10 s (reproduced with Playwright: focus went to `<body>`). The list is now redrawn only when it changed, focus returns to the same button, and after a delete it moves to the "Job name" field. Covered in the e2e journey (fails on the old page).
 - Dashboard layout shift: the add-job form and the explain results jumped down when their data arrived. Lighthouse CLS 0.214 (monitor) and 0.127 (explain), now 0 and 0.001; Lighthouse performance 90 and 96, now 100 and 100.
