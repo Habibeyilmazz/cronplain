@@ -117,7 +117,7 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
    `0 3 * * * /opt/bin/backup; curl -fsS http://127.0.0.1:4230/ping/nightly-backup/$?`
    A ping is answered with an empty body, so `curl -fsS` prints nothing when it works and cron has no output to mail; only a failed ping (a typo in the job name, `serve` not running) prints an error.
 3. Exit status 0 counts as a success. Anything from 1 to 255 marks the job **failed** and alerts at once, instead of a day later when the next run is missed. A job that keeps failing alerts only on its first failure.
-4. If no ping arrives by *the first scheduled run after the last ping + grace*, the job is **late** and cronplain alerts once. When DST ends and an hour repeats, a fixed-time job is expected only once, because cron runs it only once.
+4. If no ping arrives by *the first scheduled run after the last ping + grace*, the job is **late** and cronplain alerts once. When DST ends and an hour repeats, a fixed-time job (in crontab syntax: neither the minute nor the hour field starts with `*`, so `30 1-3 * * *` counts) is expected only once, because cron runs it only once.
 5. The next success after a failure or a late alert sends "recovered".
 
 | Ping URL | Means |

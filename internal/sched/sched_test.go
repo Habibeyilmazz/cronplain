@@ -464,3 +464,30 @@ func TestNearestWeekday(t *testing.T) {
 		}
 	}
 }
+
+// FixedTime follows cronie and Vixie cron for crontab syntax: a job is fixed-time
+// unless its minute or hour field starts with '*' (MIN_STAR/HR_STAR), so ranges count.
+func TestFixedTime(t *testing.T) {
+	for expr, want := range map[string]bool{
+		"30 1 * * *":      true,
+		"30 1-3 * * *":    true,
+		"0-30/10 1 * * *": true,
+		"5,35 1,2 * * *":  true,
+		"@daily":          true,
+		"*/15 1 * * *":    false,
+		"30 */2 * * *":    false,
+		"@hourly":         false,
+		"0 0 1-3 * * ?":   false, // Quartz: only single values
+		"0 0 1 * * ?":     true,
+		"Mon *-*-* 01:30": true,
+		"*-*-* 01..03:30": false,
+	} {
+		s, err := Parse(expr, Auto)
+		if err != nil {
+			t.Fatalf("%q: %v", expr, err)
+		}
+		if got := s.FixedTime(); got != want {
+			t.Errorf("%q: FixedTime = %v, want %v", expr, got, want)
+		}
+	}
+}

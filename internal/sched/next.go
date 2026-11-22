@@ -134,9 +134,16 @@ func resolve(y int, m time.Month, d, h, mi, sec int, loc *time.Location) []time.
 	return out
 }
 
-// FixedTime reports whether minute and hour are fixed values: cron runs such jobs
-// once when DST repeats an hour, and jobs with a wildcard or range in both passes.
-func (s *Schedule) FixedTime() bool { return singles(s.min) && singles(s.hour) }
+// FixedTime reports whether cron treats the job as fixed-time: it runs such jobs
+// once when DST repeats an hour, and wildcard jobs in both passes. Vixie cron and
+// cronie decide by the text (MIN_STAR/HR_STAR): fixed unless the minute or hour
+// field starts with '*', so "30 1-3 * * *" is fixed. Other dialects: single values only.
+func (s *Schedule) FixedTime() bool {
+	if s.Dialect == Cron {
+		return !s.min.star && !s.hour.star
+	}
+	return singles(s.min) && singles(s.hour)
+}
 
 // Next returns up to n runs strictly after from, evaluated in loc
 // (or in the schedule's own zone when the expression fixes one).
