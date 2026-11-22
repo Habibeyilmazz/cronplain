@@ -151,6 +151,14 @@ func TestDescribe(t *testing.T) {
 		"Sat..Mon 10:00":                "At 10:00 on Saturday through Monday.",
 		"cron(0/15 9-17 ? * MON-FRI *)": "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
 		"cron(0 9 ? * 2#1 *)":           "At 09:00 on the 1st Monday of the month.",
+		// wrap-around ranges read as one range, not two halves
+		"cron(0 9 ? * FRI-MON *)":       "At 09:00 on Friday through Monday.",
+		"cron(0 9 ? * 2-1 *)":           "At 09:00 on Monday through Sunday.",
+		"cron(0 9 30-2 * ? *)":          "At 09:00 on days 30 through 2 of the month.",
+		"cron(0 9 ? NOV-FEB MON *)":     "At 09:00 on Monday, in November through February.",
+		"cron(0/30 20-2 ? * MON-FRI *)": "Every 30 minutes during hours 20 through 2 on Monday through Friday.",
+		"cron(0 22-2/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 2.",
+		"cron(0 22-0/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 23.",
 		"@reboot":                       "Once, when the cron daemon starts (usually at boot). It has no calendar times.",
 	}
 	for expr, want := range cases {

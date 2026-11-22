@@ -47,6 +47,7 @@ func ParseDialect(s string) (Dialect, error) {
 type item struct {
 	lo, hi, step int
 	star         bool
+	wraps        bool // the next item continues this one past the end of the field (Quartz 20-2)
 }
 
 type field struct {
@@ -549,6 +550,7 @@ func parseField(t string, sp spec) (field, error) {
 				it.hi, it.star = sp.hi, v == sp.lo
 			}
 		}
+		it.wraps = wrapped.step > 0 && wrapped.lo <= wrapped.hi
 		for _, it := range []item{it, wrapped} {
 			if it.step == 0 || it.lo > it.hi {
 				continue // no wrapped part

@@ -63,7 +63,12 @@ func phrase(f field, unit, units string, name func(int) string) string {
 		return "every " + unit
 	}
 	var parts []string
-	for _, it := range f.items {
+	for i := 0; i < len(f.items); i++ {
+		it := f.items[i]
+		if it.wraps { // FRI-MON is stored as FRI-SAT plus SUN-MON; describe it as written
+			i++
+			it.hi = f.items[i].hi
+		}
 		switch {
 		case it.star:
 			parts = append(parts, fmt.Sprintf("every %d %s", it.step, units))
