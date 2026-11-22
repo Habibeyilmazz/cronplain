@@ -159,6 +159,11 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 			day = time.Date(y+1, 1, 1, 12, 0, 0, 0, time.UTC)
 			continue
 		}
+		if !s.month.has(int(m)) { // skip the month; its days still count toward the horizon
+			i += daysIn(y, m) - d
+			day = time.Date(y, m+1, 1, 12, 0, 0, 0, time.UTC)
+			continue
+		}
 		if s.MatchDay(y, m, d) {
 			var runs []Run
 			for _, t := range times {
@@ -182,7 +187,7 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 				}
 			}
 		}
-		day = day.AddDate(0, 0, 1)
+		day = day.Add(24 * time.Hour) // UTC noon: exact, and much cheaper than AddDate
 	}
 	return out
 }
