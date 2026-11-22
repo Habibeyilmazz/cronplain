@@ -300,7 +300,7 @@ func (s *Server) ping(w http.ResponseWriter, r *http.Request) {
 	case changed:
 		go s.alert.Send(Alert{Job: id, State: "failed", Message: fmt.Sprintf("job %q reported a failure", id)})
 	}
-	io.WriteString(w, "OK\n")
+	// 200 with no body: "curl -fsS" then prints nothing, so cron has no output to mail after every run.
 }
 
 // Check alerts once for every job whose expected ping is overdue.

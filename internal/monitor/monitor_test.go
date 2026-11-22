@@ -374,8 +374,9 @@ func TestEndToEnd(t *testing.T) {
 		t.Errorf("%d alerts after second check, want 1:\n%s", c, h.out)
 	}
 
-	// A ping brings it back and sends "recovered".
-	if code, body = h.do(t, "GET", "/ping/backup", "", nil); code != 200 || body != "OK\n" {
+	// A ping brings it back and sends "recovered". The body is empty, so curl
+	// prints nothing and cron has no output to mail after every run.
+	if code, body = h.do(t, "GET", "/ping/backup", "", nil); code != 200 || body != "" {
 		t.Fatalf("ping: %d %q", code, body)
 	}
 	if a = wait(t, h.alerts); a.State != "recovered" {
@@ -509,7 +510,7 @@ func TestFailurePings(t *testing.T) {
 	}
 
 	h.clock.set(ts(t, "2026-11-23T03:00:20Z"))
-	if code, body := h.do(t, "GET", "/ping/backup/3", "", nil); code != 200 || body != "OK\n" {
+	if code, body := h.do(t, "GET", "/ping/backup/3", "", nil); code != 200 || body != "" {
 		t.Fatalf("exit 3: %d %q", code, body)
 	}
 	a := wait(t, h.alerts)
