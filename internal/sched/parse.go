@@ -245,6 +245,9 @@ func detect(text string) Dialect {
 	if _, ok := systemdShorthands[strings.ToLower(fields[0])]; ok {
 		return Systemd
 	}
+	if _, err := parseSystemdDays(fields[0]); err == nil && len(fields) < 5 { // "Sat,Sun": weekdays alone are a full OnCalendar
+		return Systemd
+	}
 	for _, f := range fields {
 		// systemd has at most 4 parts (weekday date time zone); cron lists such as 1-2,4-5 also have two dashes
 		if strings.ContainsAny(f, ":~") || strings.Contains(f, "..") || (strings.Count(f, "-") >= 2 && len(fields) < 5) {
