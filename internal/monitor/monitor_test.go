@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -316,6 +318,25 @@ func TestRequestGuards(t *testing.T) {
 	}
 	if code, _ := h.do(t, "POST", "/api/jobs", "{", nil); code != 400 {
 		t.Errorf("bad JSON: %d", code)
+	}
+}
+
+// The page's script runs by hash; any other inline script (an XSS payload) is blocked.
+func TestPageCSP(t *testing.T) {
+	h := newHarness(t)
+	resp, err := http.Get(h.srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	_, script, _ := strings.Cut(string(body), "<script>")
+	script, _, _ = strings.Cut(script, "</script>")
+	sum := sha256.Sum256([]byte(script))
+	want := "script-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "';"
+	policy := resp.Header.Get("Content-Security-Policy")
+	if len(script) < 1000 || !strings.Contains(policy, want) || strings.Contains(policy, "script-src 'self' 'unsafe-inline'") || !strings.Contains(policy, "frame-ancestors 'none'") {
+		t.Errorf("CSP = %q, want %q", policy, want)
 	}
 }
 

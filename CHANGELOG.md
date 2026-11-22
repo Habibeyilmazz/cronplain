@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security (round 3)
+- Failed webhook/ntfy deliveries printed the full URL (`Post "https://hooks.example/T0/SECRET": ...`), leaking webhook secrets and ntfy topics into logs. Only the host and the network error are printed now.
+- CI and release builds used Go 1.26.0 from `go.mod`, which has 28 known standard-library vulnerabilities reachable from this code (govulncheck), several in the `net/http` server behind `serve`. `go.mod` now requires Go 1.26.11; CI and the release workflow run `govulncheck` (v1.10.0), so an outdated toolchain fails the build.
+- Dashboard CSP: `script-src 'unsafe-inline'` replaced by the SHA-256 hash of the page's one script (computed from the embedded file at startup), plus `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`. Checked in Chromium: the page works and an injected inline handler is blocked.
+- Release workflow: setup-go cache disabled (a tag build no longer restores caches written by other runs) and goreleaser pinned to v2.20.3 instead of "latest v2".
+
 ### Added
 - Quartz `L-n` (n days before the last day) and systemd `~` (days counted from the end of the month, e.g. `*-02~03`, `Mon *-05~07/1`).
 - `/api/jobs` POST returns `updated`; the page says "Updated" instead of "Added" when a job name already existed.
@@ -34,6 +40,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Recovered webhook alerts no longer carry a zero `due` time.
 
 ### Notes for the next person
+- Security round 3 also checked, and found fine: HTML escaping of every API value in the page, Host-header and cross-origin guards, job id/zone/topic validation (zone names with `..` or `/` prefixes are refused by `time.LoadLocation`), audit and explain output (control characters in a crontab are not echoed raw), git history (no secrets; only the noreply identity), PNG metadata, action SHAs (match their tags), `persist-credentials: false`, least-privilege `permissions`. Worst-case `/api/explain` (`* * * * * *`, n=100) takes about 35 ms.
+- Not changed: the SQLite file is created with the process umask (usually 0644); it holds job names and ping times only, no alert URLs.
+- When CI fails at the govulncheck step with a standard-library finding, raise the `go` line in `go.mod` to the fixed patch release.
 - Schedule engine: `internal/sched` (parse.go, systemd.go, next.go, describe.go, lint.go, explain.go). All UI and CLI output goes through `sched.Explain`.
 - Not implemented (rejected with a clear error): systemd fractional seconds, Quartz `L-nW`, wrap-around crontab ranges such as `FRI-MON`.
 - Days counted from the month's end (Quartz `L`, `L-n`, systemd `~`) share `Schedule.fromEnd` (1 = last day).

@@ -1,8 +1,11 @@
 package monitor
 
 import (
+	"bytes"
 	"context"
-	"embed"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +23,15 @@ import (
 )
 
 //go:embed web/index.html
-var webFS embed.FS
+var page []byte
+
+// csp allows only the page's own inline script, by hash, so injected markup cannot run code.
+var csp = func() string {
+	_, rest, _ := bytes.Cut(page, []byte("<script>"))
+	script, _, _ := bytes.Cut(rest, []byte("</script>"))
+	sum := sha256.Sum256(script)
+	return "default-src 'self'; script-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+}()
 
 // Config holds the "cronplain serve" flags.
 type Config struct {
@@ -105,9 +116,8 @@ func (s *Server) Handler(addr string) http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		page, _ := webFS.ReadFile("web/index.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:")
+		w.Header().Set("Content-Security-Policy", csp)
 		w.Write(page)
 	})
 	mux.HandleFunc("GET /api/explain", s.explain)

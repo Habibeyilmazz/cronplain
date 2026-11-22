@@ -9,7 +9,7 @@ It explains cron, Quartz, systemd and GitHub Actions schedules in plain English,
 
 ## Quickstart
 
-You need Go 1.26 or newer (no C compiler: the SQLite driver is pure Go).
+You need Go 1.26.11 or newer (no C compiler: the SQLite driver is pure Go). An older Go 1.21+ fetches that toolchain by itself; earlier 1.26 patch releases have known `net/http` vulnerabilities.
 
 ```sh
 go install github.com/Habibeyilmazz/cronplain@latest
@@ -113,7 +113,7 @@ The page follows the system light or dark theme, works at phone width, and is us
 
 <br clear="right">
 
-The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat).
+The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat). The page's Content-Security-Policy allows only its own script, by hash, and no framing. A failed alert delivery logs the host only, never the webhook path or ntfy topic, which often act as secrets.
 
 ## How it works
 
