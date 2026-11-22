@@ -99,7 +99,7 @@ $ cronplain audit examples/crontab.sample
   ...
 ```
 
-Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
+Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`; `2>/dev/null` or `2>&1` alone still mails stdout), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
 Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user field after the schedule; one file per run), `-` to read stdin, `-json` for machines. The exit code is 1 when there is any warning or error, so it can gate CI.
 
 ### Heartbeat monitor

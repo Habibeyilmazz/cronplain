@@ -31,6 +31,11 @@ func TestAudit(t *testing.T) {
 			[]string{`MAILTO="" discards it`}, nil},
 		{"stderr not redirected", "PATH=/bin\n0 3 * * * /x > /tmp/x.log\n", false,
 			[]string{"only stdout is redirected"}, nil},
+		// redirecting only stderr leaves stdout going to cron mail
+		{"only stderr redirected", "PATH=/bin\n0 3 * * * /x 2>/dev/null\n0 4 * * * /y 2>&1\n0 5 * * * /z 2>>/var/log/z.err\n", false,
+			[]string{"line 2   warn  output is not redirected", "line 3   warn  output is not redirected", "line 4   warn  output is not redirected"}, nil},
+		{"both redirected in either order", "PATH=/bin\n0 3 * * * /x 2>/dev/null >/var/log/x.log\n0 4 * * * /y &>/dev/null\n0 5 * * * /z 1>>/var/log/z.log 2>&1\n", false,
+			nil, []string{"not redirected", "only stdout"}},
 		{"pipes count as handled output", "PATH=/bin\n0 3 * * * /x | logger -t x\n", false,
 			nil, []string{"not redirected", "only stdout"}},
 		{"percent sign", "PATH=/bin\n0 3 * * * tar czf /b/$(date +%F).tgz /d >/dev/null 2>&1\n0 4 * * * date +\\%F >/dev/null 2>&1\n", false,

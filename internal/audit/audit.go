@@ -41,11 +41,13 @@ type job struct {
 }
 
 var (
-	envLine    = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$`)
-	bareCent   = regexp.MustCompile(`(^|[^\\])%`)
-	bashism    = regexp.MustCompile(`\[\[|\bsource\s|&>|<\(`)
-	lockTools  = regexp.MustCompile(`\b(flock|run-one|lockrun|solo|chronic)\b`)
-	shellWords = map[string]bool{"cd": true, "test": true, "[": true, "echo": true, "exec": true, ".": true, "export": true, "if": true, "for": true, "true": true, "false": true}
+	envLine   = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$`)
+	bareCent  = regexp.MustCompile(`(^|[^\\])%`)
+	bashism   = regexp.MustCompile(`\[\[|\bsource\s|&>|<\(`)
+	lockTools = regexp.MustCompile(`\b(flock|run-one|lockrun|solo|chronic)\b`)
+	// stderrRedirect removes stderr-only redirections: "cmd 2>/dev/null" still mails stdout.
+	stderrRedirect = strings.NewReplacer("2>&1", "", "2>>", "", "2>", "")
+	shellWords     = map[string]bool{"cd": true, "test": true, "[": true, "echo": true, "exec": true, ".": true, "export": true, "if": true, "for": true, "true": true, "false": true}
 )
 
 // collisionWindow is how far ahead start-time collisions are looked for.
@@ -150,8 +152,9 @@ func splitFields(line string, n int) ([]string, string) {
 
 func checkOutput(n int, cmd string, env map[string]string, add func(int, string, string, ...any)) {
 	mailto, mailSet := env["MAILTO"]
+	stdout := stderrRedirect.Replace(cmd) // what is left redirects stdout, if anything
 	switch {
-	case !strings.ContainsAny(cmd, ">|"):
+	case !strings.ContainsAny(stdout, ">|"):
 		if mailSet && mailto == "" {
 			add(n, "warn", `output is not redirected and MAILTO="" discards it, so errors vanish; append >> /var/log/NAME.log 2>&1`)
 		} else {
