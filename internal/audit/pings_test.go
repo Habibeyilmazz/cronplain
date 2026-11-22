@@ -134,3 +134,37 @@ func TestAddPings(t *testing.T) {
 		t.Errorf("system format: %+v\n%s", jobs, out)
 	}
 }
+
+// TestAddedPingRuns runs each rewritten line in sh, with curl stubbed out, and
+// checks that the ping is sent and carries the original command's exit status.
+func TestAddedPingRuns(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	const base = "http://127.0.0.1:4230"
+	cmds := []string{
+		"echo a", "echo a;", `echo "a;b" ;  `, "false", "true && false", "false || true", "( echo a; false )",
+		"{ echo a; }", "echo a | cat", "if false; then echo a; fi", "case x in x) echo a ;; esac",
+		"for i in 1 2; do echo $i; done", "echo 'it''s'", "echo a > /dev/null 2>&1", `echo a\\`, `echo a\;`,
+		"echo $(echo a)", "echo `echo a`", "while false; do :; done", "echo a&&false", "echo a;echo b;",
+		"test -f /nonexistent-cronplain", `printf '%s\n' x`,
+	}
+	for _, cmd := range cmds {
+		out, jobs, _ := AddPings("0 3 * * * "+cmd+"\n", Options{Location: time.UTC}, base)
+		if len(jobs) != 1 {
+			if !strings.Contains(cmd, "%") {
+				t.Errorf("%q: not monitored", cmd)
+			}
+			continue
+		}
+		_, rewritten := splitFields(strings.TrimSuffix(out, "\n"), 5)
+		want := 0
+		if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
+			want = err.(*exec.ExitError).ExitCode()
+		}
+		got, err := exec.Command("sh", "-c", `curl() { echo "PING $2"; }; `+rewritten).Output()
+		if line := fmt.Sprintf("PING %s/ping/%s/%d\n", base, jobs[0].ID, want); err != nil || !strings.HasSuffix(string(got), line) {
+			t.Errorf("%q became %q: output %q (err %v), want it to end with %q", cmd, rewritten, got, err, line)
+		}
+	}
+}
