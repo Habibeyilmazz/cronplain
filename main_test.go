@@ -19,6 +19,10 @@ func TestExplainCommand(t *testing.T) {
 		}
 	}
 	b.Reset()
+	if runExplain([]string{"-n", "1", "@daily"}, &b); !strings.Contains(b.String(), "Next run (") {
+		t.Errorf("one run should read 'Next run':\n%s", b.String())
+	}
+	b.Reset()
 	if code, _ := runExplain([]string{"-json", "@daily"}, &b); code != 0 || !strings.Contains(b.String(), `"description": "At 00:00 every day."`) {
 		t.Errorf("json output: %s", b.String())
 	}

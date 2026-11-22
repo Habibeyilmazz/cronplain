@@ -38,7 +38,11 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 	quartzExt := len(s.fromEnd) > 0 || s.lastWeekday || len(s.nearestWeekday) > 0 || len(s.lastDow) > 0 || len(s.nthDow) > 0
 
 	if len(s.Next(from, time.UTC, 1)) == 0 {
-		warn("This schedule never fires in the next 100 years.%s", s.impossibleDays())
+		reason := s.impossibleDays()
+		if s.years != nil && !s.anyYearFrom(from.Year()) {
+			reason = fmt.Sprintf(" The year field lists only years before %d.", from.Year())
+		}
+		warn("This schedule never fires in the next 100 years.%s", reason)
 		return out
 	}
 	if !s.dom.star && !quartzExt && (s.dow.star || !s.domOrDow) {
@@ -108,6 +112,11 @@ func (s *Schedule) impossibleDays() string {
 	if s.dom.star || !s.dow.star || len(s.dom.items) == 0 {
 		return ""
 	}
+	for _, m := range s.month.values() {
+		if s.dom.values()[0] <= daysIn(2024, time.Month(m)) { // 2024 is a leap year: the day exists, so the cause is elsewhere
+			return ""
+		}
+	}
 	var days, months []string
 	for _, d := range s.dom.values() {
 		days = append(days, num(d))
@@ -116,6 +125,15 @@ func (s *Schedule) impossibleDays() string {
 		months = append(months, monthName(m))
 	}
 	return fmt.Sprintf(" Day %s never occurs in %s.", join(days), join(months))
+}
+
+func (s *Schedule) anyYearFrom(y int) bool {
+	for v := range s.years {
+		if v >= y {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Schedule) shortMonths() []string {

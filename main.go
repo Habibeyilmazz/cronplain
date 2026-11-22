@@ -156,7 +156,11 @@ func runExplain(args []string, w io.Writer) (int, error) {
 func printExplanation(w io.Writer, e *sched.Explanation) {
 	fmt.Fprintf(w, "%s   [%s, evaluated in %s]\n%s\n", e.Expr, e.Dialect, e.Zone, e.Description)
 	if len(e.Runs) > 0 {
-		fmt.Fprintf(w, "\nNext %d runs (%s):\n", len(e.Runs), e.DisplayZone)
+		head := fmt.Sprintf("Next %d runs", len(e.Runs))
+		if len(e.Runs) == 1 {
+			head = "Next run"
+		}
+		fmt.Fprintf(w, "\n%s (%s):\n", head, e.DisplayZone)
 		for i, r := range e.Runs {
 			mark := ""
 			if r.Repeated {

@@ -285,7 +285,7 @@ async function explain() {
   $("#sentence").textContent = data.description;
   const names = { cron: "crontab", "cron-seconds": "cron with seconds", quartz: "Quartz", "github-actions": "GitHub Actions", systemd: "systemd OnCalendar", "aws-eventbridge": "AWS EventBridge" };
   $("#meta").textContent = `Read as ${names[data.dialect]}, evaluated in ${data.zone}` + (data.zone !== data.display_zone ? `, shown in ${data.display_zone}` : "") + ".";
-  $("#runs-title").textContent = data.runs.length ? `Next ${data.runs.length} runs` : "Next runs";
+  $("#runs-title").textContent = data.runs.length > 1 ? `Next ${data.runs.length} runs` : data.runs.length ? "Next run" : "Next runs";
   let prev = null;
   $("#runs").innerHTML = data.runs.length ? data.runs.map((r) => {
     const [day, date, time] = r.local.split(" ");
