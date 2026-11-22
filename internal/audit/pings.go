@@ -27,6 +27,8 @@ var (
 	trailingSemi = regexp.MustCompile(`(^|[^\\;])\s*;\s*$`)
 	// An odd number of trailing backslashes would escape the ";" of an appended ping.
 	trailingEscape = regexp.MustCompile(`(^|[^\\])(\\\\)*\\$`)
+	// The last command already reports $? (a ping to another address, say): an added ping would report its status instead of the job's.
+	endsWithStatus = regexp.MustCompile(`\$\?[^;&|]*$`)
 	// Words that run another program: the job is named after that program instead.
 	wrappers = map[string]bool{"nice": true, "ionice": true, "nohup": true, "chronic": true, "run-one": true, "env": true, "sudo": true, "time": true, "exec": true,
 		"sh": true, "bash": true, "dash": true, "zsh": true, "python": true, "python3": true, "perl": true, "php": true, "node": true, "ruby": true}
@@ -105,6 +107,9 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 			continue
 		case trailingEscape.MatchString(cmd):
 			note(n, "warn", `not monitored: the command ends in a backslash, which would turn an added "; curl ..." into arguments of the command, so the ping would never be sent; remove the backslash and import again`)
+			continue
+		case endsWithStatus.MatchString(cmd):
+			note(n, "warn", "not monitored: the command already ends by reporting $? (a ping to another address?), so a ping added after it would report that command's status, not the job's; if it is an older cronplain address, change it to %s/ping/NAME/$? and import again", base)
 			continue
 		case endsShell.MatchString(cmd):
 			note(n, "warn", "not monitored: exec or exit ends the shell, so a ping added at the end would not run (every time, or on failure); add the ping yourself where it fits")

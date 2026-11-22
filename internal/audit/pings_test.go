@@ -57,6 +57,7 @@ func TestAddPings(t *testing.T) {
 		"0 9 * * * /opt/bin/a || exit 1",                                              // 17: exit: no ping on failure
 		`0 10 * * * /opt/bin/a done \ `,                                               // 18: "\;" would turn the ping into arguments of the command
 		`0 11 * * * /opt/bin/b x\\`,                                                   // 19: an escaped backslash is fine
+		"0 12 * * * /opt/bin/c; curl -fsS http://localhost:4230/ping/c/$?",            // 20: a ping after it would report curl's status
 		"",
 	}, "\n")
 	out, jobs, notes := AddPings(in, Options{Location: time.UTC}, base)
@@ -95,14 +96,15 @@ func TestAddPings(t *testing.T) {
 		17: "0 9 * * * /opt/bin/a || exit 1",
 		18: `0 10 * * * /opt/bin/a done \ `,
 		19: `0 11 * * * /opt/bin/b x\\; curl -fsS ` + base + "/ping/b/$?",
-		20: "",
+		20: "0 12 * * * /opt/bin/c; curl -fsS http://localhost:4230/ping/c/$?",
+		21: "",
 	} {
 		if lines[n-1] != want {
 			t.Errorf("line %d = %q, want %q", n, lines[n-1], want)
 		}
 	}
-	if len(lines) != 20 {
-		t.Errorf("%d lines, want 20 (the trailing newline kept)", len(lines))
+	if len(lines) != 21 {
+		t.Errorf("%d lines, want 21 (the trailing newline kept)", len(lines))
 	}
 	// Every rewritten command must still be valid sh, or import would break the job.
 	for _, j := range jobs {
@@ -118,7 +120,7 @@ func TestAddPings(t *testing.T) {
 	for _, want := range []string{"6 info not monitored: @reboot", "7 info the ping reports the exit status of the last command", "8 warn not monitored: cron turns the first unescaped %",
 		"9 warn not monitored: the command runs in the background", "10 warn not monitored: the command ends in a # comment", "11 error not monitored: minute: 61",
 		"16 warn not monitored: exec or exit ends the shell", "17 warn not monitored: exec or exit ends the shell",
-		"18 warn not monitored: the command ends in a backslash"} {
+		"18 warn not monitored: the command ends in a backslash", "20 warn not monitored: the command already ends by reporting $?"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("notes lack %q:\n%s", want, b.String())
 		}
