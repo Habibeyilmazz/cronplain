@@ -25,6 +25,8 @@ var (
 	endsShell    = regexp.MustCompile(`(^|[;&|(]\s*)(exec|exit)(\s|$)`)
 	// A command's own trailing ";" (not find's "\;"): appending "; curl" would make ";;", a syntax error.
 	trailingSemi = regexp.MustCompile(`(^|[^\\;])\s*;\s*$`)
+	// An odd number of trailing backslashes would escape the ";" of an appended ping.
+	trailingEscape = regexp.MustCompile(`(^|[^\\])(\\\\)*\\$`)
 	// Words that run another program: the job is named after that program instead.
 	wrappers = map[string]bool{"nice": true, "ionice": true, "nohup": true, "chronic": true, "run-one": true, "env": true, "sudo": true, "time": true, "exec": true,
 		"sh": true, "bash": true, "dash": true, "zsh": true, "python": true, "python3": true, "perl": true, "php": true, "node": true, "ruby": true}
@@ -100,6 +102,9 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 			continue
 		case shellComment.MatchString(cmd):
 			note(n, "warn", "not monitored: the command ends in a # comment, which would swallow a ping added after it; remove the comment and import again")
+			continue
+		case trailingEscape.MatchString(cmd):
+			note(n, "warn", `not monitored: the command ends in a backslash, which would turn an added "; curl ..." into arguments of the command, so the ping would never be sent; remove the backslash and import again`)
 			continue
 		case endsShell.MatchString(cmd):
 			note(n, "warn", "not monitored: exec or exit ends the shell, so a ping added at the end would not run (every time, or on failure); add the ping yourself where it fits")

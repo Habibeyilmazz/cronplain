@@ -55,6 +55,8 @@ func TestAddPings(t *testing.T) {
 		`0 7 * * * find /tmp -exec rm {} \;`,                                          // 15: find's \; stays
 		"0 8 * * * exec /opt/bin/server",                                              // 16: exec: the ping would never run
 		"0 9 * * * /opt/bin/a || exit 1",                                              // 17: exit: no ping on failure
+		`0 10 * * * /opt/bin/a done \ `,                                               // 18: "\;" would turn the ping into arguments of the command
+		`0 11 * * * /opt/bin/b x\\`,                                                   // 19: an escaped backslash is fine
 		"",
 	}, "\n")
 	out, jobs, notes := AddPings(in, Options{Location: time.UTC}, base)
@@ -70,6 +72,7 @@ func TestAddPings(t *testing.T) {
 		"13 backup-4 0 5 * * * UTC false",
 		"14 tidy 0 6 * * * UTC false",
 		"15 find 0 7 * * * UTC false",
+		"19 b 0 11 * * * UTC false",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("jobs:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -90,14 +93,16 @@ func TestAddPings(t *testing.T) {
 		15: `0 7 * * * find /tmp -exec rm {} \;; curl -fsS ` + base + "/ping/find/$?",
 		16: "0 8 * * * exec /opt/bin/server",
 		17: "0 9 * * * /opt/bin/a || exit 1",
-		18: "",
+		18: `0 10 * * * /opt/bin/a done \ `,
+		19: `0 11 * * * /opt/bin/b x\\; curl -fsS ` + base + "/ping/b/$?",
+		20: "",
 	} {
 		if lines[n-1] != want {
 			t.Errorf("line %d = %q, want %q", n, lines[n-1], want)
 		}
 	}
-	if len(lines) != 18 {
-		t.Errorf("%d lines, want 18 (the trailing newline kept)", len(lines))
+	if len(lines) != 20 {
+		t.Errorf("%d lines, want 20 (the trailing newline kept)", len(lines))
 	}
 	// Every rewritten command must still be valid sh, or import would break the job.
 	for _, j := range jobs {
@@ -112,7 +117,8 @@ func TestAddPings(t *testing.T) {
 	}
 	for _, want := range []string{"6 info not monitored: @reboot", "7 info the ping reports the exit status of the last command", "8 warn not monitored: cron turns the first unescaped %",
 		"9 warn not monitored: the command runs in the background", "10 warn not monitored: the command ends in a # comment", "11 error not monitored: minute: 61",
-		"16 warn not monitored: exec or exit ends the shell", "17 warn not monitored: exec or exit ends the shell"} {
+		"16 warn not monitored: exec or exit ends the shell", "17 warn not monitored: exec or exit ends the shell",
+		"18 warn not monitored: the command ends in a backslash"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("notes lack %q:\n%s", want, b.String())
 		}
