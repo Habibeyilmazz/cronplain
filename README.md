@@ -20,6 +20,7 @@ go install github.com/Habibeyilmazz/cronplain@latest
 cronplain explain "0 9 1-7 * 1"
 cronplain audit /etc/crontab -system
 cronplain serve            # dashboard on http://127.0.0.1:4230
+crontab -l | cronplain import - > crontab.new   # monitor every job: review, then install with crontab crontab.new
 ```
 
 Or from a clone:
@@ -119,6 +120,34 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 3. Exit status 0 counts as a success. Anything from 1 to 255 marks the job **failed** and alerts at once, instead of a day later when the next run is missed. A job that keeps failing alerts only on its first failure.
 4. If no ping arrives by *the first scheduled run after the last ping + grace*, the job is **late** and cronplain alerts once. When DST ends and an hour repeats, a fixed-time job (in crontab syntax: neither the minute nor the hour field starts with `*`, so `30 1-3 * * *` counts) is expected only once, because cron runs it only once.
 5. The next success after a failure or a late alert sends "recovered".
+
+#### Monitor a whole crontab at once
+
+On a server you usually reach over SSH, adding jobs one by one in a browser is the slow part. `cronplain import` reads a crontab, registers every job it can monitor in the database `serve` uses, and prints the same crontab with a ping added to each of those lines. It does not install anything: you read the diff and install the file yourself.
+
+```text
+$ crontab -l > crontab.old          # here: examples/crontab.sample
+$ cronplain import -db ~/.cronplain.db crontab.old > crontab.new
+8 job(s) to monitor (database /home/me/.cronplain.db, grace 5m0s):
+  line 5    backup-db            0 0 * * *      Europe/Istanbul  added
+  line 6    rotate-logs          0 0 * * *      Europe/Istanbul  added
+  line 8    report               30 2 * * *     Europe/Istanbul  added
+  ...
+  line 7    warn  not monitored: cron turns the first unescaped % into a newline, so a ping added at the end would never run; escape it (\%) and import again
+  line 20   info  not monitored: @reboot has no calendar times, so cronplain cannot tell when it is late
+Install the printed crontab (crontab FILE) and keep "cronplain serve -db /home/me/.cronplain.db" running.
+$ diff crontab.old crontab.new
+< 0 0 * * *   /opt/app/bin/backup-db >> /var/log/backup.log 2>&1
+> 0 0 * * *   /opt/app/bin/backup-db >> /var/log/backup.log 2>&1; curl -fsS http://127.0.0.1:4230/ping/backup-db/$?
+...
+$ crontab crontab.new
+```
+
+- Each job is named after the program it runs (`flock -n x.lock python3 /opt/sync.py` is `sync`; a second `backup-db` becomes `backup-db-2`), in the zone cron runs it in (`CRON_TZ=` in the file, else `-tz`, else the machine's zone), with the grace from `-grace` (default 5 minutes).
+- A line that already pings the `-url` address keeps its job name and is left unchanged, so running `import` again on the installed crontab only updates schedules. `-dry-run` shows the result without touching the database; to pick other names, edit the ping URLs in the dry run's output and import that file (names already registered stay until you delete them on the dashboard).
+- Left alone, with a note: `@reboot`, invalid schedules, and commands where an added `; curl ...` would not run or would never see the exit status (an unescaped `%`, a trailing `&`, a trailing `# comment`).
+- The ping reports `$?`, the exit status of the last command that ran on the line: for `a; b` and `a | b` that is `b`'s, and for `a || echo failed` it is `echo`'s (`a && b` is right either way). `import` notes the lines with `|` or `||`.
+- `-system` reads `/etc/crontab` and `/etc/cron.d/` files; `-url` sets the address the jobs ping if `serve` does not listen on the default `http://127.0.0.1:4230`.
 
 The dashboard lists failed and late jobs first, and while the Monitor tab is open its browser tab title counts them, such as `(2) cronplain`.
 

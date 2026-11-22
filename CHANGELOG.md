@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (feature round 12)
+- `cronplain import FILE|-`: monitor every job of a crontab in one step. It registers each job (name, schedule, zone, grace) in the database `serve` uses and prints the crontab with `; curl -fsS http://127.0.0.1:4230/ping/NAME/$?` added to those lines; it installs nothing. Before, each job had to be added by hand in the dashboard, which on a server reached over SSH meant a tunnel or hand-written `curl` calls to the undocumented `/api/jobs`. Jobs are named after the program they run (wrappers such as `flock`, `timeout`, `nice`, `python3` are skipped; duplicates get `-2`), in the zone from `CRON_TZ=`, `-tz` or the machine. Lines that already ping the `-url` address keep their name and are not changed, so importing the installed crontab again only updates schedules. Left alone with a note: `@reboot`, invalid schedules, an unescaped `%`, a trailing `&` or `# comment`; lines with `|` or `||` get a note that `$?` is the last command's status. Flags: `-db`, `-url`, `-grace`, `-tz`, `-system`, `-dry-run`. Writing to the database while `serve` runs works (checked with the real binary: imported, ran both job lines with `sh -c`, the failing one alerted).
+- The dashboard's empty job list mentions `cronplain import`.
+- `FuzzRun` also fuzzes import: the line count never changes and a second import of the output is a no-op (3.4M inputs, no failure).
+
+### Notes for the next person (round 12)
+- Picked after using the monitor as a newcomer would on a headless server: there was no way to add jobs without a browser, and adding ten jobs by hand (then editing ten crontab lines) was the slowest step of the whole tool.
+- Fuzzing `FuzzRun` with coverage stalls at "0/sec" for up to a minute while Go minimizes a long new input; that is the fuzzer, not a hang (checked with a 3 s per-input panic guard, never hit). Pass `-fuzzminimizetime 2s`.
+- Known and left: names come from the first program word, so `"/opt/My App/run.sh"` (a quoted path with a space) is named `my`; edit the ping URL in a dry run's output to rename. `uniqueID` is quadratic in the number of identical names (irrelevant at crontab sizes).
+- Reported gaps re-checked and unchanged: a retry that fails at shutdown is still lost (documented `shortcut:`), no TypeScript explainer, AWS `L-n`/`LW` unverified (no AWS account), no caret under the bad field in CLI errors.
+
 ### Fixed (security round 11; each reproduced with a failing test first)
 - Webhook and ntfy alerts followed redirects. On a `301`/`302` Go resends the `POST` as a `GET` without the body, so a webhook URL that redirects (an `http://` URL moved to `https://`, say) could answer 200 and the alert was lost without a log line; on a `307`/`308` the alert went to whatever host the `Location` header named. Redirects are now not followed: the delivery is logged as failed (`HTTP 302 (a redirect, not followed: use the URL it points to)`), without the target URL, and not retried.
 - Terminal escape injection: errors and audit findings echo parts of the input (`unknown macro @x...`, a command name in the PATH warning), so a crafted crontab or expression could send ESC sequences to the terminal (clear the screen, retitle the window, hide earlier findings). `explain`, `audit` and `serve` now print control characters other than newline and tab, and invalid UTF-8 bytes, as Go escapes (`\x1b`). `-json` output was already escaped.

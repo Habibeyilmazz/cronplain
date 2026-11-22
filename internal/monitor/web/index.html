@@ -385,7 +385,7 @@ async function jobsTable() {
   jobs.sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2));
   const trouble = jobs.filter((j) => j.state in rank).length;
   document.title = trouble ? `(${trouble}) cronplain` : "cronplain";
-  if (!jobs.length) return `<div class="empty">No jobs yet. Add the first one below.</div>`;
+  if (!jobs.length) return `<div class="empty">No jobs yet. Add the first one below, or register every job of a crontab at once with <code>cronplain import</code>.</div>`;
   return `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last success</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
       const cmd = `curl -fsS ${location.origin}${j.ping_path}/$?`;
