@@ -22,9 +22,14 @@ type PingJob struct {
 var (
 	trailingAmp  = regexp.MustCompile(`(^|[^&])&\s*$`)
 	shellComment = regexp.MustCompile(`\s#`)
+	endsShell    = regexp.MustCompile(`(^|[;&|(]\s*)(exec|exit)(\s|$)`)
+	// A command's own trailing ";" (not find's "\;"): appending "; curl" would make ";;", a syntax error.
+	trailingSemi = regexp.MustCompile(`(^|[^\\;])\s*;\s*$`)
 	// Words that run another program: the job is named after that program instead.
 	wrappers = map[string]bool{"nice": true, "ionice": true, "nohup": true, "chronic": true, "run-one": true, "env": true, "sudo": true, "time": true, "exec": true,
 		"sh": true, "bash": true, "dash": true, "zsh": true, "python": true, "python3": true, "perl": true, "php": true, "node": true, "ruby": true}
+	shellKeywords = map[string]bool{"if": true, "then": true, "else": true, "elif": true, "while": true, "until": true, "do": true, "!": true,
+		"fi": true, "done": true, "esac": true}
 	// Wrappers whose first argument is not the program (a lock file, a duration).
 	takesArg = map[string]bool{"flock": true, "timeout": true}
 )
@@ -96,10 +101,17 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 		case shellComment.MatchString(cmd):
 			note(n, "warn", "not monitored: the command ends in a # comment, which would swallow a ping added after it; remove the comment and import again")
 			continue
+		case endsShell.MatchString(cmd):
+			note(n, "warn", "not monitored: exec or exit ends the shell, so a ping added at the end would not run (every time, or on failure); add the ping yourself where it fits")
+			continue
 		}
 		id := uniqueID(jobName(cmd), taken)
 		jobs = append(jobs, PingJob{Line: n, ID: id, Schedule: expr, Zone: loc.String()})
-		lines[i] = strings.TrimRight(raw, " \t\r") + "; curl -fsS " + base + "/ping/" + id + "/$?"
+		kept := strings.TrimRight(raw, " \t\r")
+		if m := trailingSemi.FindStringSubmatchIndex(kept); m != nil && strings.Trim(cmd, "; \t") != "" {
+			kept = kept[:m[3]]
+		}
+		lines[i] = kept + "; curl -fsS " + base + "/ping/" + id + "/$?"
 		if strings.Contains(cmd, "|") {
 			note(n, "info", "the ping reports the exit status of the last command that ran (the end of a | pipeline, or the part after ||), so an earlier failure can count as a success; use set -o pipefail in a bash script if that matters")
 		}
@@ -111,11 +123,25 @@ func AddPings(text string, o Options, base string) (string, []PingJob, []Finding
 // is backup-db, "cd /srv && flock -n x.lock python3 sync.py" is sync.
 func jobName(cmd string) string {
 	for _, part := range listParts(cmd) {
-		if quiet(part) {
+		// "( cd /x && ./run )" is one part: name it after what runs inside
+		if p := strings.TrimLeft(part, "! \t"); strings.HasPrefix(p, "(") || strings.HasPrefix(p, "{") {
+			if end := strings.LastIndexAny(p, ")}"); end > 0 {
+				if id := jobName(p[1:end]); id != "job" {
+					return id
+				}
+			}
+			continue
+		}
+		// "if [ -f x ]", "then /x": look past keywords
+		words := strings.Fields(strings.TrimLeft(part, "! \t"))
+		for len(words) > 0 && shellKeywords[words[0]] {
+			words = words[1:]
+		}
+		if len(words) == 0 || words[0] == "for" || words[0] == "case" || quiet(strings.Join(words, " ")) {
 			continue
 		}
 		skipArg := false
-		for _, w := range strings.Fields(part) {
+		for _, w := range words {
 			if strings.ContainsAny(w, "<>|") {
 				break
 			}

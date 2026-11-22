@@ -145,7 +145,7 @@ $ crontab crontab.new
 
 - Each job is named after the program it runs (`flock -n x.lock python3 /opt/sync.py` is `sync`; a second `backup-db` becomes `backup-db-2`), in the zone cron runs it in (`CRON_TZ=` in the file, else `-tz`, else the machine's zone), with the grace from `-grace` (default 5 minutes).
 - A line that already pings the `-url` address keeps its job name and is left unchanged, so running `import` again on the installed crontab only updates schedules. `-dry-run` shows the result without touching the database; to pick other names, edit the ping URLs in the dry run's output and import that file (names already registered stay until you delete them on the dashboard).
-- Left alone, with a note: `@reboot`, invalid schedules, and commands where an added `; curl ...` would not run or would never see the exit status (an unescaped `%`, a trailing `&`, a trailing `# comment`).
+- Left alone, with a note: `@reboot`, invalid schedules, and commands where an added `; curl ...` would not run or would never see the exit status (an unescaped `%`, a trailing `&`, a trailing `# comment`, `exec` or `exit`).
 - The ping reports `$?`, the exit status of the last command that ran on the line: for `a; b` and `a | b` that is `b`'s, and for `a || echo failed` it is `echo`'s (`a && b` is right either way). `import` notes the lines with `|` or `||`.
 - `-system` reads `/etc/crontab` and `/etc/cron.d/` files; `-url` sets the address the jobs ping if `serve` does not listen on the default `http://127.0.0.1:4230`.
 

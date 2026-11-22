@@ -2,6 +2,7 @@ package audit
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,10 @@ func TestJobName(t *testing.T) {
 		"PATH=/bin:/usr/bin /usr/local/bin/renew-certs":                "renew-certs",
 		"/opt/bin/build.v2.0 && echo done":                             "build-v2",
 		"cd /tmp; sleep 5":                                             "job",
+		"( cd /srv/x && ./run ) > /dev/null":                           "run",
+		"if [ -f /etc/x ]; then /opt/bin/rotate; fi":                   "rotate",
+		"for f in /a /b; do /opt/bin/scan $f; done":                    "scan",
+		"while ! /opt/bin/ready; do sleep 1; done":                     "ready",
 		"/opt/x/ÜBER.sh":                                               "ber",
 	}
 	for cmd, want := range cases {
@@ -46,6 +51,10 @@ func TestAddPings(t *testing.T) {
 		"61 * * * * /opt/bin/bad",                                                     // 11: invalid
 		"TZ=UTC",                                                                      // 12
 		"0 5 * * * /opt/bin/backup && /opt/bin/upload\r",                              // 13: CRLF kept out of the ping
+		"0 6 * * * /opt/bin/tidy ; ",                                                  // 14: its own ; is dropped, not doubled
+		`0 7 * * * find /tmp -exec rm {} \;`,                                          // 15: find's \; stays
+		"0 8 * * * exec /opt/bin/server",                                              // 16: exec: the ping would never run
+		"0 9 * * * /opt/bin/a || exit 1",                                              // 17: exit: no ping on failure
 		"",
 	}, "\n")
 	out, jobs, notes := AddPings(in, Options{Location: time.UTC}, base)
@@ -59,6 +68,8 @@ func TestAddPings(t *testing.T) {
 		"5 backup-2 */5 * * * * Europe/Istanbul true",
 		"7 report @daily Europe/Istanbul false",
 		"13 backup-4 0 5 * * * UTC false",
+		"14 tidy 0 6 * * * UTC false",
+		"15 find 0 7 * * * UTC false",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("jobs:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -75,21 +86,33 @@ func TestAddPings(t *testing.T) {
 		10: "0 2 * * * /opt/bin/x # nightly",
 		11: "61 * * * * /opt/bin/bad",
 		13: "0 5 * * * /opt/bin/backup && /opt/bin/upload; curl -fsS " + base + "/ping/backup-4/$?",
-		14: "",
+		14: "0 6 * * * /opt/bin/tidy; curl -fsS " + base + "/ping/tidy/$?",
+		15: `0 7 * * * find /tmp -exec rm {} \;; curl -fsS ` + base + "/ping/find/$?",
+		16: "0 8 * * * exec /opt/bin/server",
+		17: "0 9 * * * /opt/bin/a || exit 1",
+		18: "",
 	} {
 		if lines[n-1] != want {
 			t.Errorf("line %d = %q, want %q", n, lines[n-1], want)
 		}
 	}
-	if len(lines) != 14 {
-		t.Errorf("%d lines, want 14 (the trailing newline kept)", len(lines))
+	if len(lines) != 18 {
+		t.Errorf("%d lines, want 18 (the trailing newline kept)", len(lines))
+	}
+	// Every rewritten command must still be valid sh, or import would break the job.
+	for _, j := range jobs {
+		_, cmd := splitFields(lines[j.Line-1], len(strings.Fields(j.Schedule)))
+		if out, err := exec.Command("sh", "-n", "-c", cmd).CombinedOutput(); err != nil {
+			t.Errorf("line %d is no longer valid sh: %q: %s", j.Line, cmd, out)
+		}
 	}
 	var b strings.Builder
 	for _, n := range notes {
 		fmt.Fprintf(&b, "%d %s %s\n", n.Line, n.Level, n.Message)
 	}
 	for _, want := range []string{"6 info not monitored: @reboot", "7 info the ping reports the exit status of the last command", "8 warn not monitored: cron turns the first unescaped %",
-		"9 warn not monitored: the command runs in the background", "10 warn not monitored: the command ends in a # comment", "11 error not monitored: minute: 61"} {
+		"9 warn not monitored: the command runs in the background", "10 warn not monitored: the command ends in a # comment", "11 error not monitored: minute: 61",
+		"16 warn not monitored: exec or exit ends the shell", "17 warn not monitored: exec or exit ends the shell"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("notes lack %q:\n%s", want, b.String())
 		}
