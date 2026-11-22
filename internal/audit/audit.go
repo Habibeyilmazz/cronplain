@@ -60,11 +60,23 @@ func Run(text string, o Options) *Report {
 	env := map[string]string{}
 	loc := o.Location
 	var jobs []job
-	for i, raw := range strings.Split(text, "\n") {
+	// Files saved by some editors; cron reads these bytes literally.
+	if t, ok := strings.CutPrefix(text, "\ufeff"); ok {
+		text = t
+		add(1, "error", "the file starts with a UTF-8 byte order mark: cron reads it as part of line 1, so that line does not work; save the file as UTF-8 without BOM")
+	}
+	if strings.Contains(text, "\r\n") {
+		add(0, "error", `the file has Windows (CRLF) line endings: cron keeps the \r, so commands and variables such as PATH end in a stray carriage return; convert it with dos2unix or sed -i 's/\r$//'`)
+	}
+	lines := strings.Split(text, "\n")
+	for i, raw := range lines {
 		n := i + 1
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
+		}
+		if n == len(lines) {
+			add(n, "warn", "the file does not end with a newline: cronie's crontab command refuses to install it and Vixie/Debian cron treats the last line as broken; add a newline at the end")
 		}
 		if m := envLine.FindStringSubmatch(line); m != nil {
 			val := strings.Trim(m[2], `"'`)

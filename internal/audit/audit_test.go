@@ -51,6 +51,15 @@ func TestAudit(t *testing.T) {
 			[]string{"2 job(s): 0 error(s), 0 warning(s)"}, nil},
 		{"reboot jobs are fine", "PATH=/bin\n@reboot /warm >/dev/null 2>&1\n", false,
 			[]string{"1 job(s): 0 error(s), 0 warning(s)"}, nil},
+		// files saved by Windows editors
+		{"byte order mark", "\xef\xbb\xbfSHELL=/bin/sh\nPATH=/bin\n0 3 * * * /x >/dev/null 2>&1\n", false,
+			[]string{"line 1   error the file starts with a UTF-8 byte order mark", "1 job(s)"}, []string{"no command after"}},
+		{"CRLF line endings", "SHELL=/bin/sh\r\nPATH=/bin\r\n0 3 * * * /x >/dev/null 2>&1\r\n", false,
+			[]string{"file     error the file has Windows (CRLF) line endings"}, nil},
+		{"no newline at the end", "SHELL=/bin/sh\nPATH=/bin\n0 3 * * * /x >/dev/null 2>&1", false,
+			[]string{"line 3   warn  the file does not end with a newline"}, nil},
+		{"trailing comment without newline is harmless", "SHELL=/bin/sh\nPATH=/bin\n0 3 * * * /x >/dev/null 2>&1\n# end", false,
+			[]string{"0 error(s), 0 warning(s), 0 note(s)"}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
