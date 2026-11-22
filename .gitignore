@@ -1,0 +1,10 @@
+/cronplain
+/dist/
+*.db
+*.db-*
+.env
+.env.*
+node_modules/
+.DS_Store
+/tmp/
+test-results/
