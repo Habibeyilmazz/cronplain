@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wrap-around ranges read as two halves: `FRI-MON` was "Friday through Saturday and Sunday through Monday"; now "Friday through Monday". Same for hours (`20-2`), days (`30-2`), months (`NOV-FEB`) and stepped wraps (`22-2/3`).
 - `0 0 0 1 1 ? 2025` said "Day 1 never occurs in January"; it now says the year field lists only past years. The day reason is given only when the day exists in none of the months.
 - `0 9 * 1 *` read "At 09:00 in January." (sounds like one date); now "At 09:00 every day in January." Also systemd `2027-*-* 00:00`.
-- A pasted GitHub Actions line with a YAML comment, `- cron: '0 9 * * 1' # every Monday`, failed with "5 fields, got 8".
+- A pasted GitHub Actions line with a YAML comment, `- cron: '0 9 * * 1' # every Monday`, failed with "5 fields, got 8". Text after the closing quote that is not a comment is now an error (it was silently dropped in the first version of this fix; found by a Codex review).
 - "Next 1 runs" is now "Next run" (CLI and web page).
 
 ### Added (reliability round 5)

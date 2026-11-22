@@ -47,6 +47,7 @@ func TestDetect(t *testing.T) {
 		"- cron: '0 9 * * 1' # Mondays":      GitHubActions,
 		"- cron: \"0 9 * * 1\"  # 09:00 UTC": GitHubActions,
 		"- cron: 0 9 * * 1 # Mondays":        GitHubActions,
+		"cron: 0 9 * * 1\t# Mondays":         GitHubActions,
 		"CRON_TZ=Europe/Istanbul 0 9 * * *":  Cron,
 		"cron(0 12 * * ? *)":                 AWS,
 		`"cron(0 12 * * ? *)"`:               AWS,
@@ -68,6 +69,9 @@ func TestDetect(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
+	if _, err := Parse("- cron: '0 9 * * 1' garbage", Auto); err == nil || !strings.Contains(err.Error(), "after the quoted schedule") {
+		t.Errorf("text after a quoted cron: value: err = %v", err)
+	}
 	cases := []struct {
 		expr    string
 		dialect Dialect

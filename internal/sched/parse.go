@@ -4,6 +4,7 @@ package sched
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -132,9 +133,13 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	if t := strings.TrimSpace(strings.TrimPrefix(text, "-")); strings.HasPrefix(t, "cron:") {
 		v := strings.TrimSpace(strings.TrimPrefix(t, "cron:"))
 		if q := v[:min(1, len(v))]; q == "'" || q == `"` {
-			v, _, _ = strings.Cut(v[1:], q) // drops the closing quote and any "# comment" after it
-		} else {
-			v, _, _ = strings.Cut(v, " #") // YAML comment after a plain value
+			var rest string
+			v, rest, _ = strings.Cut(v[1:], q)
+			if rest = strings.TrimSpace(rest); rest != "" && !strings.HasPrefix(rest, "#") {
+				return nil, fmt.Errorf("unexpected %q after the quoted schedule", rest)
+			}
+		} else if m := yamlComment.FindStringIndex(v); m != nil {
+			v = v[:m[0]] // YAML comment after a plain value: whitespace, then #
 		}
 		text = strings.TrimSpace(v)
 		if d == Auto {
@@ -190,6 +195,8 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	}
 	return s, nil
 }
+
+var yamlComment = regexp.MustCompile(`[ \t]#`)
 
 var systemdShorthands = map[string]string{
 	"minutely": "*-*-* *:*:00", "hourly": "*-*-* *:00:00", "daily": "*-*-* 00:00:00",
