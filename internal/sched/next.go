@@ -12,6 +12,7 @@ const horizonDays = 366 * 100
 type Run struct {
 	Time     time.Time
 	Repeated bool // the wall-clock time occurs twice that day (DST ended) and fires both times
+	Again    bool // the later of the two instants of a repeated wall time
 }
 
 func daysIn(y int, m time.Month) int {
@@ -153,8 +154,8 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 			var runs []Run
 			for _, t := range times {
 				inst := resolve(y, m, d, t[0], t[1], t[2], loc)
-				for _, it := range inst {
-					runs = append(runs, Run{Time: it, Repeated: len(inst) > 1})
+				for k, it := range inst {
+					runs = append(runs, Run{Time: it, Repeated: len(inst) > 1, Again: len(inst) == 2 && it.After(inst[1-k])})
 				}
 			}
 			sort.Slice(runs, func(a, b int) bool { return runs[a].Time.Before(runs[b].Time) })

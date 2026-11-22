@@ -226,6 +226,9 @@ func TestRepeatedFlag(t *testing.T) {
 	if !runs[0].Repeated || !runs[1].Repeated || runs[2].Repeated {
 		t.Errorf("repeated flags = %v %v %v, want true true false", runs[0].Repeated, runs[1].Repeated, runs[2].Repeated)
 	}
+	if runs[0].Again || !runs[1].Again || runs[2].Again {
+		t.Errorf("again flags = %v %v %v, want false true false", runs[0].Again, runs[1].Again, runs[2].Again)
+	}
 }
 
 func TestDSTEvents(t *testing.T) {

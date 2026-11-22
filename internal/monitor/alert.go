@@ -17,7 +17,7 @@ type Alert struct {
 	Job      string     `json:"job"`
 	State    string     `json:"state"` // "late" or "recovered"
 	Schedule string     `json:"schedule"`
-	Due      time.Time  `json:"due"`
+	Due      time.Time  `json:"due,omitzero"` // unset on "recovered"
 	LastPing *time.Time `json:"last_ping"`
 	Message  string     `json:"message"`
 }

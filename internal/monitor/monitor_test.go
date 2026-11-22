@@ -57,6 +57,21 @@ func TestStatus(t *testing.T) {
 	if !due.Equal(ts(t, "2027-03-15T02:30:00-04:00")) {
 		t.Errorf("DST due = %s", due)
 	}
+	// DST ends: cron runs a 01:30 job once, so after the first 01:30 ping the next is due the day after.
+	fallback, _ := sched.Parse("30 1 * * *", sched.Cron)
+	quarter, _ := sched.Parse("*/15 * * * *", sched.Cron)
+	for _, c := range []struct {
+		s              *sched.Schedule
+		ping, now, due string
+	}{
+		{fallback, "2027-11-07T01:31:00-04:00", "2027-11-07T01:40:00-05:00", "2027-11-08T01:30:00-05:00"},
+		{quarter, "2027-11-07T01:46:00-04:00", "2027-11-07T01:20:00-05:00", "2027-11-07T02:00:00-05:00"},
+	} {
+		state, due := Status(Job{LastPing: ptr(c.ping)}, c.s, ny, ts(t, c.now))
+		if state != StateUp || !due.Equal(ts(t, c.due)) {
+			t.Errorf("fall back %s: got %s %s, want up %s", c.s.Expr, state, due.Format(time.RFC3339), c.due)
+		}
+	}
 }
 
 func TestValidate(t *testing.T) {
