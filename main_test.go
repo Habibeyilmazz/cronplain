@@ -26,6 +26,10 @@ func TestExplainCommand(t *testing.T) {
 	if code, _ := runExplain([]string{"-json", "@daily"}, &b); code != 0 || !strings.Contains(b.String(), `"description": "At 00:00 every day."`) {
 		t.Errorf("json output: %s", b.String())
 	}
+	// What "cronplain explain 0 9 * * 1" becomes when the shell expands the stars.
+	if _, err := runExplain([]string{"0", "9", "go.mod", "main.go", "go.mod", "main.go", "1"}, &b); err == nil || !strings.Contains(err.Error(), "put the expression in quotes") {
+		t.Errorf("unquoted stars: %v", err)
+	}
 	for _, args := range [][]string{{}, {"61 * * * *"}, {"-tz", "Mars/Base", "* * * * *"}, {"-n", "0", "* * * * *"}, {"-dialect", "x", "* * * * *"}} {
 		if code, _ := runExplain(args, &b); code != 2 {
 			t.Errorf("%q: exit %d, want 2", args, code)

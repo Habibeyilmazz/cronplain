@@ -151,6 +151,11 @@ func runExplain(args []string, w io.Writer) (int, error) {
 	}
 	e, err := sched.Explain(strings.Join(pos, " "), d, loc, *n, time.Now())
 	if err != nil {
+		for _, a := range pos {
+			if _, statErr := os.Stat(a); statErr == nil && len(pos) > 1 {
+				return 2, fmt.Errorf("%w\n%q is a file here: the shell turns an unquoted * into file names, so put the expression in quotes, e.g. cronplain explain \"0 9 * * 1\"", err, a)
+			}
+		}
 		return 2, err
 	}
 	if *asJSON {
