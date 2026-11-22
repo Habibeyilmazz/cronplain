@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -103,7 +104,11 @@ func Serve(cfg Config, out io.Writer) error {
 		defer cancel()
 		srv.Shutdown(shut)
 	}()
-	fmt.Fprintf(out, "cronplain dashboard: http://%s  (database %s, Ctrl-C to stop)\n", ln.Addr(), cfg.DB)
+	db := cfg.DB
+	if abs, err := filepath.Abs(db); err == nil {
+		db = abs // the default is relative: say which directory the jobs live in
+	}
+	fmt.Fprintf(out, "cronplain dashboard: http://%s  (database %s, Ctrl-C to stop)\n", ln.Addr(), db)
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
