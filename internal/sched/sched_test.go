@@ -45,6 +45,12 @@ func TestDetect(t *testing.T) {
 		"- cron: '30 5 * * 1'":              GitHubActions,
 		"cron: \"*/15 * * * *\"":            GitHubActions,
 		"CRON_TZ=Europe/Istanbul 0 9 * * *": Cron,
+		"cron(0 12 * * ? *)":                AWS,
+		`"cron(0 12 * * ? *)"`:              AWS,
+		"0 18 ? * MON-FRI *":                AWS,
+		"0 8 1W * ? *":                      AWS,
+		"15 10 ? * 6L 2027":                 AWS,
+		"0 12 * JUL ? *":                    AWS,
 	}
 	for expr, want := range cases {
 		s, err := Parse(expr, Auto)
@@ -91,6 +97,12 @@ func TestParseErrors(t *testing.T) {
 		{"*-*-* 25:00", Systemd, "hour: 25"},
 		{"CRON_TZ=Mars/Olympus 0 9 * * *", Auto, "unknown time zone"},
 		{"0 9 * * * /usr/bin/backup", Cron, "did you mean"},
+		{"cron(0 12 * * * *)", Auto, "AWS needs exactly one"},
+		{"cron(0 12 * * ?)", Auto, "have 6 fields, got 5 (minute hour"},
+		{"cron(0 12 ? * 0 *)", Auto, "0 is out of range 1-7"},
+		{"cron(0 12 ? * MON 2200)", Auto, "year: 2200"},
+		{"rate(5 minutes)", Auto, "no clock times"},
+		{"at(2026-12-01T09:00:00)", Auto, "one-time"},
 	}
 	for _, c := range cases {
 		_, err := Parse(c.expr, c.dialect)
@@ -102,38 +114,40 @@ func TestParseErrors(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	cases := map[string]string{
-		"* * * * *":             "Every minute.",
-		"*/15 * * * *":          "Every 15 minutes.",
-		"0 * * * *":             "At minute 0 of every hour.",
-		"30 2 * * *":            "At 02:30 every day.",
-		"@daily":                "At 00:00 every day.",
-		"5,35 8,20 * * *":       "At 08:05, 08:35, 20:05 and 20:35 every day.",
-		"0 */2 * * *":           "At minute 0 past every 2nd hour.",
-		"*/15 9-17 * * 1-5":     "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
-		"*/20 9 * * *":          "Every 20 minutes from 09:00 through 09:40.",
-		"* 22-23 * * *":         "Every minute from 22:00 through 23:59.",
-		"*/7 9-17 * * *":        "Every 7 minutes during hours 9 through 17.",
-		"0-30/10 9-17 * * *":    "Every 10 minutes from 0 through 30 during hours 9 through 17.",
-		"0 9 * * MON,WED,FRI":   "At 09:00 on Monday, Wednesday and Friday.",
-		"0 0 1 1,7 *":           "At 00:00 on day 1 of the month, in January and July.",
-		"0 0 13 * 5":            "At 00:00 on day 13 of the month or on Friday.",
-		"0 0 */2 * *":           "At 00:00 on every 2nd day of the month (from the 1st).",
-		"0 0 * * 7":             "At 00:00 on Sunday.",
-		"*/10 * * * * *":        "Every 10 seconds.",
-		"0 0 12 ? * 6#3":        "At 12:00 on the 3rd Friday of the month.",
-		"0 0 12 ? * 6L":         "At 12:00 on the last Friday of the month.",
-		"0 0 12 L * ?":          "At 12:00 on the last day of the month.",
-		"0 0 12 LW * ?":         "At 12:00 on the last weekday (Mon-Fri) of the month.",
-		"0 0 0 1 1 ? */2":       "At 00:00 on day 1 of the month, in January, in every 2nd year from 1970.",
-		"0 0 12 L-2 * ?":        "At 12:00 on the 3rd-to-last day of the month.",
-		"*-02~03":               "At 00:00 on the 3rd-to-last day of the month, in February.",
-		"Mon *-05~07/1":         "At 00:00 on the last 7 days of the month, on Monday, in May.",
-		"0 0 12 15W * ?":        "At 12:00 on the weekday nearest day 15 of the month.",
-		"0 0 0 1 1 ? 2027-2029": "At 00:00 on day 1 of the month, in January, in 2027 through 2029.",
-		"Mon..Fri *-*-* 09:00":  "At 09:00 on Monday through Friday.",
-		"*:0/15":                "Every 15 minutes.",
-		"Sat..Mon 10:00":        "At 10:00 on Saturday through Monday.",
-		"@reboot":               "Once, when the cron daemon starts (usually at boot). It has no calendar times.",
+		"* * * * *":                     "Every minute.",
+		"*/15 * * * *":                  "Every 15 minutes.",
+		"0 * * * *":                     "At minute 0 of every hour.",
+		"30 2 * * *":                    "At 02:30 every day.",
+		"@daily":                        "At 00:00 every day.",
+		"5,35 8,20 * * *":               "At 08:05, 08:35, 20:05 and 20:35 every day.",
+		"0 */2 * * *":                   "At minute 0 past every 2nd hour.",
+		"*/15 9-17 * * 1-5":             "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
+		"*/20 9 * * *":                  "Every 20 minutes from 09:00 through 09:40.",
+		"* 22-23 * * *":                 "Every minute from 22:00 through 23:59.",
+		"*/7 9-17 * * *":                "Every 7 minutes during hours 9 through 17.",
+		"0-30/10 9-17 * * *":            "Every 10 minutes from 0 through 30 during hours 9 through 17.",
+		"0 9 * * MON,WED,FRI":           "At 09:00 on Monday, Wednesday and Friday.",
+		"0 0 1 1,7 *":                   "At 00:00 on day 1 of the month, in January and July.",
+		"0 0 13 * 5":                    "At 00:00 on day 13 of the month or on Friday.",
+		"0 0 */2 * *":                   "At 00:00 on every 2nd day of the month (from the 1st).",
+		"0 0 * * 7":                     "At 00:00 on Sunday.",
+		"*/10 * * * * *":                "Every 10 seconds.",
+		"0 0 12 ? * 6#3":                "At 12:00 on the 3rd Friday of the month.",
+		"0 0 12 ? * 6L":                 "At 12:00 on the last Friday of the month.",
+		"0 0 12 L * ?":                  "At 12:00 on the last day of the month.",
+		"0 0 12 LW * ?":                 "At 12:00 on the last weekday (Mon-Fri) of the month.",
+		"0 0 0 1 1 ? */2":               "At 00:00 on day 1 of the month, in January, in every 2nd year from 1970.",
+		"0 0 12 L-2 * ?":                "At 12:00 on the 3rd-to-last day of the month.",
+		"*-02~03":                       "At 00:00 on the 3rd-to-last day of the month, in February.",
+		"Mon *-05~07/1":                 "At 00:00 on the last 7 days of the month, on Monday, in May.",
+		"0 0 12 15W * ?":                "At 12:00 on the weekday nearest day 15 of the month.",
+		"0 0 0 1 1 ? 2027-2029":         "At 00:00 on day 1 of the month, in January, in 2027 through 2029.",
+		"Mon..Fri *-*-* 09:00":          "At 09:00 on Monday through Friday.",
+		"*:0/15":                        "Every 15 minutes.",
+		"Sat..Mon 10:00":                "At 10:00 on Saturday through Monday.",
+		"cron(0/15 9-17 ? * MON-FRI *)": "Every 15 minutes from 09:00 through 17:45 on Monday through Friday.",
+		"cron(0 9 ? * 2#1 *)":           "At 09:00 on the 1st Monday of the month.",
+		"@reboot":                       "Once, when the cron daemon starts (usually at boot). It has no calendar times.",
 	}
 	for expr, want := range cases {
 		s, err := Parse(expr, Auto)
@@ -221,6 +235,15 @@ func TestNext(t *testing.T) {
 		{"CRON_TZ", "CRON_TZ=Asia/Tokyo 0 9 * * *", "UTC", "2026-11-21T23:00:00Z",
 			[]string{"2026-11-22T09:00:00+09:00"}},
 		{"reboot has no times", "@reboot", "UTC", "2026-11-22T00:00:00Z", nil},
+		{"AWS is UTC whatever the display zone", "cron(0 12 * * ? *)", "Europe/Istanbul", "2026-11-22T13:00:00+03:00",
+			[]string{"2026-11-22T12:00:00Z"}}, // Istanbul's 12:00 has passed, UTC's has not
+		{"AWS 1 is Sunday", "cron(0 9 ? * 1 *)", "UTC", "2026-11-22T10:00:00Z", []string{"2026-11-29T09:00:00Z"}},
+		{"AWS last Friday in one year", "cron(15 10 ? * 6L 2027)", "UTC", "2027-11-01T00:00:00Z",
+			[]string{"2027-11-26T10:15:00Z", "2027-12-31T10:15:00Z"}},
+		{"AWS L is the last day of the month", "cron(0 0 L * ? *)", "UTC", "2028-02-01T00:00:00Z",
+			[]string{"2028-02-29T00:00:00Z", "2028-03-31T00:00:00Z"}},
+		{"AWS Scheduler zone via CRON_TZ skips the DST gap", "CRON_TZ=America/New_York cron(30 2 ? * SUN *)", "UTC", "2027-03-07T12:00:00Z",
+			[]string{"2027-03-21T02:30:00-04:00"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -310,6 +333,8 @@ func TestLints(t *testing.T) {
 		{"Fri *-*-13", Systemd, []string{"both the weekday and the date", "machine's time zone"}, nil},
 		{"daily UTC", Systemd, nil, []string{"machine's time zone"}},
 		{"0 9 * * 1-5", Cron, nil, []string{"warn"}},
+		{"cron(0 9 ? * 2-6 *)", Auto, []string{"EventBridge rules run in UTC", "1 = Sunday"}, []string{"warn"}},
+		{"CRON_TZ=Europe/Istanbul cron(0 9 ? * MON *)", Auto, nil, []string{"run in UTC", "1 = Sunday"}},
 	}
 	for _, c := range cases {
 		s, err := Parse(c.expr, c.dialect)

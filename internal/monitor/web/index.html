@@ -149,7 +149,7 @@ form.add input { width: 100%; }
   <main>
   <section id="panel-explain" aria-label="Explain a schedule">
     <div class="expr-box">
-      <label for="expr">Schedule: crontab, Quartz, systemd OnCalendar or a GitHub Actions <code>cron:</code> line</label>
+      <label for="expr">Schedule: crontab, Quartz, systemd OnCalendar, AWS <code>cron(…)</code> or a GitHub Actions <code>cron:</code> line</label>
       <input id="expr" value="30 2 * * 1-5" autocomplete="off" spellcheck="false">
       <div class="fields" id="fields" aria-hidden="true"></div>
     </div>
@@ -164,6 +164,7 @@ form.add input { width: 100%; }
           <option value="quartz">Quartz</option>
           <option value="github-actions">GitHub Actions</option>
           <option value="systemd">systemd OnCalendar</option>
+          <option value="aws-eventbridge">AWS EventBridge</option>
         </select>
       </label>
       <label>Runs <input id="n" type="number" min="1" max="100" value="20"></label>
@@ -175,6 +176,7 @@ form.add input { width: 100%; }
       <button type="button">0 0 12 ? * 6#3</button>
       <button type="button">Mon..Fri *-*-* 18:00</button>
       <button type="button">- cron: '*/2 * * * *'</button>
+      <button type="button">cron(0 9 ? * MON-FRI *)</button>
     </div>
 
     <div aria-live="polite">
@@ -241,6 +243,7 @@ const labels = {
   "github-actions": ["minute", "hour", "day of month", "month", "day of week"],
   "cron-seconds": ["second", "minute", "hour", "day of month", "month", "day of week"],
   quartz: ["second", "minute", "hour", "day of month", "month", "day of week", "year"],
+  "aws-eventbridge": ["minute", "hour", "day of month", "month", "day of week", "year"],
   systemd: null,
 };
 function drawFields(expr, dialect) {
@@ -280,7 +283,7 @@ async function explain() {
   $("#results").hidden = false;
   drawFields(data.expr, data.dialect);
   $("#sentence").textContent = data.description;
-  const names = { cron: "crontab", "cron-seconds": "cron with seconds", quartz: "Quartz", "github-actions": "GitHub Actions", systemd: "systemd OnCalendar" };
+  const names = { cron: "crontab", "cron-seconds": "cron with seconds", quartz: "Quartz", "github-actions": "GitHub Actions", systemd: "systemd OnCalendar", "aws-eventbridge": "AWS EventBridge" };
   $("#meta").textContent = `Read as ${names[data.dialect]}, evaluated in ${data.zone}` + (data.zone !== data.display_zone ? `, shown in ${data.display_zone}` : "") + ".";
   $("#runs-title").textContent = data.runs.length ? `Next ${data.runs.length} runs` : "Next runs";
   let prev = null;

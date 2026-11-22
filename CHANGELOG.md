@@ -5,6 +5,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (feature round 4)
+- AWS EventBridge schedules: `cron(0 9 ? * MON-FRI *)` (also quoted, as pasted from Terraform or CloudFormation) or the bare six fields `minute hour day-of-month month day-of-week year`, detected automatically or with `-dialect aws-eventbridge`. Before, `cron(0 12 * * ? *)` failed with `second: "cron(0" is not a number`. Uses the Quartz day rules (`?`, `L`, `nW`, `n#k`, 1 = Sunday); evaluated in UTC like EventBridge rules, or in the zone of a `CRON_TZ=` prefix (EventBridge Scheduler time zones). Lints: UTC, and 1 = Sunday when the weekday field has numbers. `rate(...)` and `at(...)` get an explanation instead of a parse error. Works in the web explainer (syntax option, field labels, example button) and for monitor jobs.
+
 ### Security (round 3)
 - Failed webhook/ntfy deliveries printed the full URL (`Post "https://hooks.example/T0/SECRET": ...`), leaking webhook secrets and ntfy topics into logs. Only the host and the network error are printed now.
 - CI and release builds used Go 1.26.0 from `go.mod`, which has 28 known standard-library vulnerabilities reachable from this code (govulncheck), several in the `net/http` server behind `serve`. `go.mod` now requires Go 1.26.11; CI and the release workflow run `govulncheck` (v1.10.0), so an outdated toolchain fails the build.
@@ -40,6 +43,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Recovered webhook alerts no longer carry a zero `due` time.
 
 ### Notes for the next person
+- Round 4 (feature) picked AWS support after trying the tool as a newcomer: it was the most common schedule syntax that failed outright. Detection: 6 fields with a Quartz day marker in fields 3 or 5 (1-based) is AWS; in fields 4 or 6 it is Quartz, so the two never collide. AWS is parsed by prepending a `0` seconds field and reusing the Quartz parser (`parseCron`).
+- Round 4 checked the reported gaps: auditing 200 never-firing lines takes 0.8 s (4 ms a line), not worth a cache yet. The SQLite umask note and the missing TypeScript explainer still stand.
 - Security round 3 also checked, and found fine: HTML escaping of every API value in the page, Host-header and cross-origin guards, job id/zone/topic validation (zone names with `..` or `/` prefixes are refused by `time.LoadLocation`), audit and explain output (control characters in a crontab are not echoed raw), git history (no secrets; only the noreply identity), PNG metadata, action SHAs (match their tags), `persist-credentials: false`, least-privilege `permissions`. Worst-case `/api/explain` (`* * * * * *`, n=100) takes about 35 ms.
 - Not changed: the SQLite file is created with the process umask (usually 0644); it holds job names and ping times only, no alert URLs.
 - When CI fails at the govulncheck step with a standard-library finding, raise the `go` line in `go.mod` to the fixed patch release.

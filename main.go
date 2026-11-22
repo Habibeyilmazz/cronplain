@@ -120,7 +120,7 @@ func runExplain(args []string, w io.Writer) (int, error) {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	tz := fs.String("tz", "", "IANA time zone to evaluate and show times in (default: local)")
 	n := fs.Int("n", 20, "number of upcoming runs to list (1-500)")
-	dialect := fs.String("dialect", "auto", "auto, cron, cron-seconds, quartz, github-actions or systemd")
+	dialect := fs.String("dialect", "auto", "auto, cron, cron-seconds, quartz, github-actions, systemd or aws-eventbridge")
 	asJSON := fs.Bool("json", false, "print JSON")
 	pos, err := parseArgs(fs, args)
 	if err != nil {

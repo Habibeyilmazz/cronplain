@@ -14,11 +14,12 @@ type Dialect string
 
 const (
 	Auto          Dialect = "auto"
-	Cron          Dialect = "cron"           // 5-field Vixie cron / cronie
-	CronSeconds   Dialect = "cron-seconds"   // 6-field, seconds first, Unix day numbers
-	Quartz        Dialect = "quartz"         // 6/7-field Quartz, days 1-7 = SUN-SAT
-	GitHubActions Dialect = "github-actions" // 5-field cron evaluated in UTC
-	Systemd       Dialect = "systemd"        // OnCalendar=
+	Cron          Dialect = "cron"            // 5-field Vixie cron / cronie
+	CronSeconds   Dialect = "cron-seconds"    // 6-field, seconds first, Unix day numbers
+	Quartz        Dialect = "quartz"          // 6/7-field Quartz, days 1-7 = SUN-SAT
+	GitHubActions Dialect = "github-actions"  // 5-field cron evaluated in UTC
+	Systemd       Dialect = "systemd"         // OnCalendar=
+	AWS           Dialect = "aws-eventbridge" // cron(min hour dom month dow year), days 1-7 = SUN-SAT
 )
 
 // ParseDialect validates a user-supplied dialect name.
@@ -36,8 +37,10 @@ func ParseDialect(s string) (Dialect, error) {
 		return GitHubActions, nil
 	case "systemd", "oncalendar":
 		return Systemd, nil
+	case "aws-eventbridge", "aws", "eventbridge", "cloudwatch":
+		return AWS, nil
 	}
-	return "", fmt.Errorf("unknown dialect %q (want auto, cron, cron-seconds, quartz, github-actions or systemd)", s)
+	return "", fmt.Errorf("unknown dialect %q (want auto, cron, cron-seconds, quartz, github-actions, systemd or aws-eventbridge)", s)
 }
 
 // item is one comma-separated piece of a field, kept for descriptions.
@@ -141,6 +144,17 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 			text = strings.TrimSpace(after)
 		}
 	}
+	// AWS EventBridge / CloudWatch Events, possibly quoted from Terraform or CloudFormation: "cron(0 12 * * ? *)"
+	if t := strings.Trim(text, `'"`); strings.HasPrefix(t, "cron(") && strings.HasSuffix(t, ")") {
+		text = strings.TrimSpace(t[len("cron(") : len(t)-1])
+		if d == Auto {
+			d = AWS
+		}
+	} else if strings.HasPrefix(t, "rate(") {
+		return nil, fmt.Errorf("%s is an AWS rate expression: it repeats at that interval counted from when the rule or schedule was created, so it has no clock times to list. cronplain reads AWS cron(...) expressions", t)
+	} else if strings.HasPrefix(t, "at(") {
+		return nil, fmt.Errorf("%s is a one-time AWS EventBridge Scheduler schedule; cronplain reads AWS cron(...) expressions", t)
+	}
 	if text == "" {
 		return nil, fmt.Errorf("no schedule after the prefix")
 	}
@@ -153,7 +167,7 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	switch d {
 	case Systemd:
 		err = s.parseSystemd(text)
-	case Cron, CronSeconds, Quartz, GitHubActions:
+	case Cron, CronSeconds, Quartz, GitHubActions, AWS:
 		err = s.parseCron(text)
 	default:
 		err = fmt.Errorf("unknown dialect %q", d)
@@ -161,8 +175,8 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	if err != nil {
 		return nil, err
 	}
-	if d == GitHubActions {
-		s.Location = time.UTC
+	if d == GitHubActions || d == AWS && s.Location == nil {
+		s.Location = time.UTC // EventBridge rules run in UTC; a CRON_TZ= prefix stands in for a Scheduler time zone
 	}
 	return s, nil
 }
@@ -195,6 +209,10 @@ func detect(text string) Dialect {
 		if quartzDay(fields[3]) || quartzDay(fields[5]) {
 			return Quartz
 		}
+		// AWS has no seconds, so its day fields sit one place earlier
+		if quartzDay(fields[2]) || quartzDay(fields[4]) {
+			return AWS
+		}
 		return CronSeconds
 	case 7:
 		return Quartz
@@ -224,23 +242,26 @@ func (s *Schedule) parseCron(text string) error {
 		text = def
 	}
 	f := strings.Fields(text)
-	want := map[Dialect]string{Cron: "5", GitHubActions: "5", CronSeconds: "6", Quartz: "6 or 7"}[d]
+	want := map[Dialect]string{Cron: "5", GitHubActions: "5", CronSeconds: "6", Quartz: "6 or 7", AWS: "6"}[d]
 	switch {
 	case (d == Cron || d == GitHubActions) && len(f) != 5,
-		d == CronSeconds && len(f) != 6,
+		(d == CronSeconds || d == AWS) && len(f) != 6,
 		d == Quartz && len(f) != 6 && len(f) != 7:
 		hint := ""
 		if len(f) == 6 && (d == Cron || d == GitHubActions) {
-			hint = " (6 fields: did you mean a seconds-first or Quartz expression? crontab lines also put the command after the 5 fields)"
+			hint = " (6 fields: did you mean a seconds-first, Quartz or AWS cron(...) expression? crontab lines also put the command after the 5 fields)"
+		}
+		if len(f) == 5 && d == AWS {
+			hint = " (minute hour day-of-month month day-of-week year)"
 		}
 		return fmt.Errorf("%s expressions have %s fields, got %d%s", d, want, len(f), hint)
 	}
-	if len(f) == 5 {
+	if len(f) == 5 || d == AWS {
 		f = append([]string{"0"}, f...)
 	} else {
 		s.hasSeconds = true
 	}
-	quartz := d == Quartz
+	quartz := d == Quartz || d == AWS
 	var err error
 	if s.sec, err = parseField(f[0], secSpec); err != nil {
 		return err
@@ -262,7 +283,7 @@ func (s *Schedule) parseCron(text string) error {
 	}
 	if quartz {
 		if (domText == "?") == (dowText == "?") {
-			return fmt.Errorf("Quartz needs exactly one of day-of-month and day-of-week to be '?'")
+			return fmt.Errorf("%s needs exactly one of day-of-month and day-of-week to be '?'", map[bool]string{true: "AWS", false: "Quartz"}[d == AWS])
 		}
 		if err = s.parseQuartzDom(domText); err != nil {
 			return err

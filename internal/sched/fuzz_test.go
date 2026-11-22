@@ -9,7 +9,8 @@ import (
 // Run longer locally with: go test ./internal/sched -fuzz FuzzExplain -fuzztime 60s
 func FuzzExplain(f *testing.F) {
 	for _, s := range []string{"* * * * *", "0 0 12 ? * 6#3", "0 0 12 LW * ?", "Mon..Fri *-*-* 09:00 UTC", "@daily",
-		"- cron: '*/5 * * * *'", "CRON_TZ=UTC 0 9 * * *", "1- * * * *", "*/ * * * *", "0 0 12 ? * #", "*-*~01", "W", ", , , , ,", "2027-*-01/2 12:00"} {
+		"- cron: '*/5 * * * *'", "CRON_TZ=UTC 0 9 * * *", "1- * * * *", "*/ * * * *", "0 0 12 ? * #", "*-*~01", "W", ", , , , ,", "2027-*-01/2 12:00",
+		"cron(0 12 * * ? *)", "cron()", "\"cron(15 10 ? * 6L 2027)\"", "rate(5 minutes)", "0 8 1W * ? *"} {
 		f.Add(s)
 	}
 	ny, _ := time.LoadLocation("America/New_York")

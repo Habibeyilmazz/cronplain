@@ -3,7 +3,7 @@
 ![cronplain: the expression 30 2 * * 0 with each field labelled](assets/hero.png)
 
 Understand, test and monitor scheduled jobs from one small Go binary.
-It explains cron, Quartz, systemd and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job did not report in.
+It explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job did not report in.
 
 ![The explainer in the local web UI: "At 02:30 on Sunday." with the next 20 runs in America/New_York and a note that 02:30 does not exist on 14 March 2027](docs/screenshots/explain.png)
 
@@ -62,7 +62,9 @@ Daylight saving time:
   | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
   | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
   | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works; always evaluated in UTC |
+  | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone |
 
+  AWS `rate(...)` and `at(...)` schedules are rejected with a note: they have no calendar pattern to explain. AWS documents only `L`, `W` and `#` among the extensions; cronplain also accepts Quartz's `L-n` and `LW` there, so check those in the AWS console.
   Not supported yet: systemd fractional seconds, Quartz `L-nW`, wrap-around ranges such as `FRI-MON` in crontab syntax. Each one is rejected with a message rather than guessed.
   Quartz extensions in a 5-field crontab are rejected with an explanation, because Vixie cron, cronie and GitHub Actions do not accept them.
 
@@ -75,6 +77,7 @@ Daylight saving time:
   - `*/7` in minutes is uneven across the hour;
   - GitHub Actions: UTC, at most every 5 minutes, busy minute 0, default branch only and 60-day inactivity pause;
   - systemd: weekday *and* date must match; no zone means the machine's zone.
+  - AWS: rules run in UTC; day-of-week numbers start at 1 = Sunday; exactly one day field must be `?`.
 
 ### Audit a crontab
 

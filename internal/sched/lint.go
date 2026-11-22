@@ -85,6 +85,13 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 			info("Minute 0 is the busiest time on GitHub Actions and runs are often delayed or dropped; an odd minute such as 17 is more punctual.")
 		}
 		info("Scheduled workflows run on the default branch only, and GitHub disables them in public repositories after 60 days without activity.")
+	case AWS:
+		if s.Location == time.UTC {
+			info("EventBridge rules run in UTC. EventBridge Scheduler can use a time zone instead: put CRON_TZ=Zone before the expression to see the runs there.")
+		}
+		if f := strings.Fields(s.Expr); len(f) == 6 && strings.ContainsAny(f[4], "1234567") {
+			info("AWS numbers days of the week 1 = Sunday ... 7 = Saturday, not 0-6 like crontab.")
+		}
 	case Systemd:
 		if !s.dom.star && !s.dow.star {
 			info("systemd requires both the weekday and the date to match (cron would accept either).")
