@@ -93,6 +93,12 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 		if s.Location == time.UTC {
 			info("EventBridge rules run in UTC. EventBridge Scheduler can use a time zone instead: put CRON_TZ=Zone before the expression to see the runs there.")
 		}
+		for _, n := range s.fromEnd {
+			if n > 1 {
+				info("L-n is not in the AWS documentation, which lists only L and nW for the day of the month; check that AWS accepts this expression before relying on it.")
+				break
+			}
+		}
 		if f := strings.Fields(s.Expr); len(f) == 6 && strings.ContainsAny(f[4], "1234567") {
 			info("AWS numbers days of the week 1 = Sunday ... 7 = Saturday, not 0-6 like crontab.")
 		}

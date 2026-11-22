@@ -359,6 +359,8 @@ func TestLints(t *testing.T) {
 		{"daily UTC", Systemd, nil, []string{"machine's time zone"}},
 		{"0 9 * * 1-5", Cron, nil, []string{"warn"}},
 		{"cron(0 9 ? * 2-6 *)", Auto, []string{"EventBridge rules run in UTC", "1 = Sunday"}, []string{"warn"}},
+		{"cron(0 9 L-2 * ? *)", Auto, []string{"L-n is not in the AWS documentation"}, nil},
+		{"cron(0 9 L * ? *)", Auto, nil, []string{"AWS documentation"}},
 		{"CRON_TZ=Europe/Istanbul cron(0 9 ? * MON *)", Auto, nil, []string{"run in UTC", "1 = Sunday"}},
 	}
 	for _, c := range cases {
