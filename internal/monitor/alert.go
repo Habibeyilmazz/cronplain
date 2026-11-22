@@ -3,6 +3,7 @@ package monitor
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -89,6 +90,10 @@ func (a *Alerter) post(target, ctype string, body []byte, headers map[string]str
 	}
 	resp, err := a.Client.Do(req)
 	if err != nil {
+		// *url.Error prints the whole URL, and a webhook path or ntfy topic is a secret.
+		if ue, ok := errors.AsType[*url.Error](err); ok {
+			err = ue.Err
+		}
 		fmt.Fprintf(a.Out, "alert delivery to %s failed: %v\n", req.URL.Host, err)
 		return
 	}

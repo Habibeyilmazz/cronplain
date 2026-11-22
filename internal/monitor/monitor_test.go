@@ -111,6 +111,22 @@ func TestNewAlerter(t *testing.T) {
 	}
 }
 
+// Webhook paths (Slack, Discord) and ntfy topics are secrets: a failed delivery
+// must not print them to the log.
+func TestAlertFailureHidesSecretURL(t *testing.T) {
+	dead := httptest.NewServer(nil)
+	dead.Close() // nothing listens here any more
+	var out bytes.Buffer
+	a, err := NewAlerter(&out, dead.URL+"/hooks/T000/SECRET-PATH", dead.URL, "secret-topic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Send(Alert{Job: "backup", State: "late", Message: "job is late"})
+	if s := out.String(); strings.Contains(s, "SECRET-PATH") || strings.Contains(s, "secret-topic") || strings.Count(s, "delivery to") != 2 {
+		t.Errorf("log leaks the alert URL or misses a failure:\n%s", s)
+	}
+}
+
 type clock struct {
 	mu sync.Mutex
 	t  time.Time
