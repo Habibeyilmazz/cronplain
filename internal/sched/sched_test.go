@@ -349,6 +349,35 @@ func TestRepeatedFlag(t *testing.T) {
 	}
 }
 
+// NextUntil must return exactly the runs of Next that are not after until, in any zone.
+func TestNextUntil(t *testing.T) {
+	from := at(t, "2026-10-28T00:00:00Z")
+	for _, z := range []string{"UTC", "America/New_York", "Pacific/Kiritimati", "Pacific/Pago_Pago", "Europe/Istanbul"} {
+		for _, expr := range []string{"30 1 * * *", "0 9 * * 1", "0 0 1 * *", "0 0 30 2 *", "*/20 * * * *", "0 0 12 ? * 6#5"} {
+			d := Cron
+			if strings.Contains(expr, "?") {
+				d = Quartz
+			}
+			s, err := Parse(expr, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, until := range []time.Time{from, from.Add(7 * 24 * time.Hour), from.Add(7*24*time.Hour + 13*time.Hour + 45*time.Minute), from.Add(40 * 24 * time.Hour)} {
+				var want []Run
+				for _, r := range s.Next(from, zone(t, z), 200) {
+					if !r.Time.After(until) {
+						want = append(want, r)
+					}
+				}
+				got := s.NextUntil(from, until, zone(t, z), 200)
+				if len(got) != len(want) || (len(want) > 0 && !got[len(got)-1].Time.Equal(want[len(want)-1].Time)) {
+					t.Errorf("%s in %s until %s: %d runs, want %d", expr, z, until.Format(time.RFC3339), len(got), len(want))
+				}
+			}
+		}
+	}
+}
+
 func TestDSTEvents(t *testing.T) {
 	cases := []struct {
 		expr, tz, from, until string

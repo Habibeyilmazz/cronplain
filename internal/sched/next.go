@@ -150,6 +150,11 @@ func (s *Schedule) FixedTime() bool {
 // Wall-clock semantics: a time inside a DST gap does not fire, a time inside
 // a DST overlap fires twice. See DSTEvents for how real schedulers differ.
 func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
+	return s.NextUntil(from, time.Time{}, loc, n)
+}
+
+// NextUntil is Next that also stops at the first run after until (zero: no limit).
+func (s *Schedule) NextUntil(from, until time.Time, loc *time.Location, n int) []Run {
 	if s.Location != nil {
 		loc = s.Location
 	}
@@ -161,6 +166,9 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 	day := time.Date(start.Year(), start.Month(), start.Day(), 12, 0, 0, 0, time.UTC)
 	var out []Run
 	for i := 0; i < horizonDays && len(out) < n; i++ {
+		if !until.IsZero() && day.Add(-48*time.Hour).After(until) { // every instant of this wall date is past until
+			break
+		}
 		y, m, d := day.Date()
 		if s.years != nil && !s.years[y] {
 			day = time.Date(y+1, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -199,6 +207,9 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 			}
 			sort.Slice(runs, func(a, b int) bool { return runs[a].Time.Before(runs[b].Time) })
 			for _, r := range runs {
+				if !until.IsZero() && r.Time.After(until) {
+					return out
+				}
 				if r.Time.After(from) && len(out) < n {
 					out = append(out, r)
 				}

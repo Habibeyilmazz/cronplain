@@ -39,6 +39,7 @@ type job struct {
 	command  string
 	sched    *sched.Schedule
 	loc      *time.Location
+	gap      time.Duration // shortest interval between runs, 0 if it runs once or never
 }
 
 var (
@@ -122,7 +123,7 @@ func Run(text string, o Options) *Report {
 			continue
 		}
 		r.Jobs++
-		jobs = append(jobs, job{line: n, schedule: expr, command: cmd, sched: s, loc: loc})
+		jobs = append(jobs, job{line: n, schedule: expr, command: cmd, sched: s, loc: loc, gap: s.MinInterval(o.From)})
 		// Lines copied between /etc/crontab (with a user field) and a user crontab (without).
 		switch first := strings.Fields(cmd)[0]; {
 		case o.System && !userName.MatchString(head[schedLen]):
@@ -142,7 +143,7 @@ func Run(text string, o Options) *Report {
 	}
 	checkEnv(jobs, env, add)
 	checkDuplicates(jobs, add)
-	checkOverlap(jobs, o.From, add)
+	checkOverlap(jobs, add)
 	checkCollisions(jobs, o.From, add)
 	sort.SliceStable(r.Findings, func(a, b int) bool { return r.Findings[a].Line < r.Findings[b].Line })
 	return r
@@ -301,11 +302,10 @@ func checkDuplicates(jobs []job, add func(int, string, string, ...any)) {
 	}
 }
 
-func checkOverlap(jobs []job, from time.Time, add func(int, string, string, ...any)) {
+func checkOverlap(jobs []job, add func(int, string, string, ...any)) {
 	for _, j := range jobs {
-		gap := j.sched.MinInterval(from)
-		if gap > 0 && gap <= 5*time.Minute && !lockTools.MatchString(j.command) {
-			add(j.line, "info", "runs every %d minute(s) with no lock: if one run takes longer, the next starts on top of it. Wrap it with flock -n /tmp/NAME.lock", int(gap.Minutes()))
+		if j.gap > 0 && j.gap <= 5*time.Minute && !lockTools.MatchString(j.command) {
+			add(j.line, "info", "runs every %d minute(s) with no lock: if one run takes longer, the next starts on top of it. Wrap it with flock -n /tmp/NAME.lock", int(j.gap.Minutes()))
 		}
 	}
 }
@@ -314,13 +314,10 @@ func checkOverlap(jobs []job, from time.Time, add func(int, string, string, ...a
 func checkCollisions(jobs []job, from time.Time, add func(int, string, string, ...any)) {
 	starts := map[int64][]int{} // unix minute -> job lines
 	for _, j := range jobs {
-		if gap := j.sched.MinInterval(from); gap > 0 && gap < time.Hour {
+		if j.gap > 0 && j.gap < time.Hour {
 			continue // frequent jobs collide with everything; checkOverlap covers them
 		}
-		for _, run := range j.sched.Next(from, j.loc, 200) {
-			if run.Time.Sub(from) > collisionWindow {
-				break
-			}
+		for _, run := range j.sched.NextUntil(from, from.Add(collisionWindow), j.loc, 200) {
 			m := run.Time.Unix() / 60
 			if l := starts[m]; len(l) == 0 || l[len(l)-1] != j.line {
 				starts[m] = append(l, j.line)
