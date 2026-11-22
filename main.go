@@ -403,12 +403,12 @@ func runImport(args []string, stdin io.Reader, w, log io.Writer) (int, error) {
 			return 2, err
 		}
 		defer store.Close()
-		for i := range jobs {
-			existed, err := store.Upsert(jobs[i])
-			if err != nil {
-				return 2, err
-			}
-			state[i] = map[bool]string{false: "added", true: "updated"}[existed]
+		existed, err := store.UpsertAll(jobs)
+		if err != nil {
+			return 2, err
+		}
+		for i, e := range existed {
+			state[i] = map[bool]string{false: "added", true: "updated"}[e]
 		}
 		where = "database " + *db
 		if abs, err := filepath.Abs(*db); err == nil {

@@ -99,13 +99,31 @@ func (s *Store) Close() error { return s.db.Close() }
 // Upsert adds a job or updates its schedule, zone and grace (keeping its ping history);
 // it reports whether the job already existed.
 func (s *Store) Upsert(j Job) (existed bool, err error) {
-	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)`, j.ID).Scan(&existed); err != nil {
-		return false, err
+	e, err := s.UpsertAll([]Job{j})
+	return err == nil && e[0], err
+}
+
+// UpsertAll upserts jobs in one transaction and reports which existed. "cronplain import"
+// uses it: one short write lock instead of one per job, which kept pings from another
+// process waiting past the busy timeout while a large crontab was imported on a slow disk.
+func (s *Store) UpsertAll(jobs []Job) ([]bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
 	}
-	_, err = s.db.Exec(`INSERT INTO jobs (id, schedule, tz, grace, created_at) VALUES (?, ?, ?, ?, ?)
+	defer tx.Rollback()
+	existed := make([]bool, len(jobs))
+	for i, j := range jobs {
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)`, j.ID).Scan(&existed[i]); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`INSERT INTO jobs (id, schedule, tz, grace, created_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET schedule = excluded.schedule, tz = excluded.tz, grace = excluded.grace, alerted_due = NULL`,
-		j.ID, j.Schedule, j.TZ, j.Grace, j.CreatedAt.Unix())
-	return existed, err
+			j.ID, j.Schedule, j.TZ, j.Grace, j.CreatedAt.Unix()); err != nil {
+			return nil, err
+		}
+	}
+	return existed, tx.Commit()
 }
 
 // Delete removes a job; it reports whether the job existed.

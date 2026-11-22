@@ -540,10 +540,14 @@ func TestPingsDuringWritesFromAnotherProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan error)
-	go func() {
-		for i := range 300 {
-			if _, err := other.Upsert(Job{ID: fmt.Sprintf("j%d", i), Schedule: "0 9 * * *", TZ: "UTC"}); err != nil {
-				done <- err
+	go func() { // what "cronplain import" does: one transaction per import, here 20 imports of 300 jobs
+		jobs := make([]Job, 300)
+		for i := range jobs {
+			jobs[i] = Job{ID: fmt.Sprintf("j%d", i), Schedule: "0 9 * * *", TZ: "UTC"}
+		}
+		for range 20 {
+			if existed, err := other.UpsertAll(jobs); err != nil || len(existed) != len(jobs) {
+				done <- fmt.Errorf("%v (%d results)", err, len(existed))
 				return
 			}
 		}
