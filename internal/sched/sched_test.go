@@ -108,6 +108,11 @@ func TestParseErrors(t *testing.T) {
 		{"*-*-* 25:00", Systemd, "hour: 25"},
 		{"CRON_TZ=Mars/Olympus 0 9 * * *", Auto, "unknown time zone"},
 		{"0 9 * * * /usr/bin/backup", Cron, "did you mean"},
+		// whole crontab lines pasted with their command
+		{"0 3 * * * /opt/bin/backup >> /var/log/b.log 2>&1", Auto, `the schedule is "0 3 * * *" and the rest is the command`},
+		{"0 3 * * * root /opt/bin/backup", Auto, `the schedule is "0 3 * * *"`},
+		{"@daily /usr/bin/x", Auto, `the schedule is "@daily"`},
+		{"*/15 * * * 1-5 /x", Auto, `the schedule is "*/15 * * * 1-5"`},
 		{"cron(0 12 * * * *)", Auto, "AWS needs exactly one"},
 		{"cron(0 12 * * ?)", Auto, "have 6 fields, got 5 (minute hour"},
 		{"cron(0 12 ? * 0 *)", Auto, "0 is out of range 1-7"},

@@ -122,6 +122,7 @@ var (
 // Parse reads expr in the given dialect (Auto detects it).
 func Parse(expr string, d Dialect) (*Schedule, error) {
 	s := &Schedule{}
+	asked := d
 	text := strings.TrimSpace(expr)
 	if text == "" {
 		return nil, fmt.Errorf("empty expression")
@@ -206,6 +207,17 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 		err = fmt.Errorf("unknown dialect %q", d)
 	}
 	if err != nil {
+		// A whole crontab line pasted with its command: say so instead of only "got 9 fields".
+		f, n := strings.Fields(text), 5
+		if strings.HasPrefix(text, "@") {
+			n = 1
+		}
+		if (asked == Auto || asked == Cron) && len(f) > n {
+			head := strings.Join(f[:n], " ")
+			if _, e := Parse(head, Cron); e == nil {
+				return nil, fmt.Errorf("%w. This looks like a whole crontab line: the schedule is %q and the rest is the command. Explain only the schedule, or check whole lines with cronplain audit", err, head)
+			}
+		}
 		return nil, err
 	}
 	if d == GitHubActions || d == AWS && s.Location == nil {
