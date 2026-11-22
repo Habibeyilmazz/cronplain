@@ -130,7 +130,13 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 	}
 	// GitHub Actions YAML: "- cron: '0 9 * * 1'"
 	if t := strings.TrimSpace(strings.TrimPrefix(text, "-")); strings.HasPrefix(t, "cron:") {
-		text = strings.Trim(strings.TrimSpace(strings.TrimPrefix(t, "cron:")), `'"`)
+		v := strings.TrimSpace(strings.TrimPrefix(t, "cron:"))
+		if q := v[:min(1, len(v))]; q == "'" || q == `"` {
+			v, _, _ = strings.Cut(v[1:], q) // drops the closing quote and any "# comment" after it
+		} else {
+			v, _, _ = strings.Cut(v, " #") // YAML comment after a plain value
+		}
+		text = strings.TrimSpace(v)
 		if d == Auto {
 			d = GitHubActions
 		}
