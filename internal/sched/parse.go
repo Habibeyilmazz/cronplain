@@ -597,6 +597,9 @@ func parseField(t string, sp spec) (field, error) {
 			}
 		}
 		it.wraps = wrapped.step > 0 && wrapped.lo <= wrapped.hi
+		if !it.star && !it.wraps && it.step > 1 && it.lo+it.step > it.hi && sp.name != "year" {
+			it.hi, it.step = it.lo, 1 // "9-10/5" holds only 9: describe it as 9
+		}
 		for _, it := range []item{it, wrapped} {
 			if it.step == 0 || it.lo > it.hi {
 				continue // no wrapped part

@@ -179,7 +179,11 @@ func TestDescribe(t *testing.T) {
 		"cron(0 9 ? NOV-FEB MON *)":     "At 09:00 on Monday, in November through February.",
 		"cron(0/30 20-2 ? * MON-FRI *)": "Every 30 minutes during hours 20 through 2 on Monday through Friday.",
 		"cron(0 22-2/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 2.",
-		"cron(0 22-0/3 * * ? *)":        "At minute 0 past every 3 hours from 22 through 23.",
+		"cron(0 22-0/3 * * ? *)":        "At 22:00 every day.",
+		// a stepped range that holds one value is that value
+		"0 9-10/5 * * *": "At 09:00 every day.",
+		"50/20 * * * *":  "At minute 50 of every hour.",
+		"0 0 1-3/7 * *":  "At 00:00 on day 1 of the month.",
 		// a step in weekdays or months restarts every week or year, so name the values
 		"0 0 * * */2":    "At 00:00 on Sunday, Tuesday, Thursday and Saturday.",
 		"0 0 * * 1-5/2":  "At 00:00 on Monday, Wednesday and Friday.",
