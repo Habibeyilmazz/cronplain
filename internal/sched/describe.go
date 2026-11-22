@@ -2,6 +2,7 @@ package sched
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -157,7 +158,7 @@ func (s *Schedule) timePart() string {
 
 func (s *Schedule) datePart() string {
 	if len(s.dom.items) == 1 && len(s.month.items) == 1 && singles(s.dom) && singles(s.month) && every(s.dow) && s.years == nil &&
-		!s.lastDay && !s.lastWeekday && len(s.nearestWeekday) == 0 {
+		len(s.fromEnd) == 0 && !s.lastWeekday && len(s.nearestWeekday) == 0 {
 		return fmt.Sprintf("on %d %s", s.dom.items[0].lo, monthName(s.month.items[0].lo)) // "on 1 January"
 	}
 	var dom, dw []string
@@ -168,8 +169,8 @@ func (s *Schedule) datePart() string {
 			dom = append(dom, "on "+phrase(s.dom, "day", "days", num)+" of the month")
 		}
 	}
-	if s.lastDay {
-		dom = append(dom, "on the last day of the month")
+	if len(s.fromEnd) > 0 {
+		dom = append(dom, "on "+fromEndPhrase(s.fromEnd)+" of the month")
 	}
 	if s.lastWeekday {
 		dom = append(dom, "on the last weekday (Mon-Fri) of the month")
@@ -211,4 +212,22 @@ func (s *Schedule) datePart() string {
 		parts = append(parts, "in "+join(ys))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// fromEndPhrase describes days counted from the end of the month (1 = last day).
+func fromEndPhrase(ns []int) string {
+	sorted := append([]int{}, ns...)
+	sort.Ints(sorted)
+	if len(sorted) > 1 && sorted[0] == 1 && sorted[len(sorted)-1] == len(sorted) {
+		return fmt.Sprintf("the last %d days", len(sorted))
+	}
+	var parts []string
+	for _, n := range sorted {
+		if n == 1 {
+			parts = append(parts, "the last day")
+		} else {
+			parts = append(parts, fmt.Sprintf("the %s-to-last day", ordinal(n)))
+		}
+	}
+	return join(parts)
 }

@@ -2,6 +2,7 @@ package sched
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,7 +14,7 @@ var systemdDays = map[string]int{
 
 // parseSystemd reads the systemd.time(7) calendar-event subset:
 // "[Weekdays] [[YYYY-]MM-DD] [HH:MM[:SS]] [Time/Zone]" plus the shorthands.
-// shortcut: no "~" (last days of month) and no fractional seconds; add them when someone needs them.
+// shortcut: no fractional seconds; add them when someone needs them.
 func (s *Schedule) parseSystemd(text string) error {
 	s.hasSeconds = true
 	toks := strings.Fields(text)
@@ -48,9 +49,6 @@ func (s *Schedule) parseSystemd(text string) error {
 			return fmt.Errorf("systemd: cannot read %q (expected weekday, [YYYY-]MM-DD, HH:MM[:SS] or a time zone)", t)
 		}
 	}
-	if strings.Contains(dateTok, "~") {
-		return fmt.Errorf("systemd: '~' (days counted from the end of the month) is not supported yet")
-	}
 	var err error
 	s.dow = full(dowSpec)
 	s.dow.bits &^= 1 << 7
@@ -61,6 +59,10 @@ func (s *Schedule) parseSystemd(text string) error {
 	}
 	if dateTok == "" {
 		dateTok = "*-*-*"
+	}
+	fromEnd := strings.Contains(dateTok, "~")
+	if fromEnd {
+		dateTok = strings.Replace(dateTok, "~", "-", 1)
 	}
 	parts := strings.Split(dateTok, "-")
 	if len(parts) == 2 {
@@ -79,7 +81,11 @@ func (s *Schedule) parseSystemd(text string) error {
 	if s.month, err = parseField(dots(parts[1]), monSpec); err != nil {
 		return err
 	}
-	if s.dom, err = parseField(dots(parts[2]), domSpec); err != nil {
+	if fromEnd {
+		if s.fromEnd, err = parseFromEnd(dots(parts[2])); err != nil {
+			return err
+		}
+	} else if s.dom, err = parseField(dots(parts[2]), domSpec); err != nil {
 		return err
 	}
 	if timeTok == "" {
@@ -139,4 +145,32 @@ func parseSystemdDays(t string) (field, error) {
 		f.items = append(f.items, it)
 	}
 	return f, nil
+}
+
+// parseFromEnd reads the day after systemd's "~": ~1 is the last day of the month,
+// ~3 the third-to-last, and "~7/1" the 7th-to-last day and every day after it.
+func parseFromEnd(t string) ([]int, error) {
+	var out []int
+	for _, p := range strings.Split(t, ",") {
+		if a, step, ok := strings.Cut(p, "/"); ok && !strings.Contains(a, "-") {
+			start, err := parseValue(a, domSpec)
+			if err != nil {
+				return nil, err
+			}
+			n, err := strconv.Atoi(step)
+			if err != nil || n < 1 {
+				return nil, fmt.Errorf("systemd: step %q must be a positive number", step)
+			}
+			for v := start; v >= 1; v -= n { // repeats run towards the end of the month
+				out = append(out, v)
+			}
+			continue
+		}
+		f, err := parseField(p, domSpec)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f.values()...)
+	}
+	return out, nil
 }

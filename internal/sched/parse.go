@@ -79,7 +79,7 @@ type Schedule struct {
 	domOrDow                        bool // Vixie rule: both day fields restricted => either may match
 
 	// Quartz extensions (day-of-week values are 0-6, Sunday = 0)
-	lastDay        bool     // L in day-of-month
+	fromEnd        []int    // L, L-n and systemd ~n: 1 = last day of the month, 2 = the day before, ...
 	lastWeekday    bool     // LW
 	nearestWeekday []int    // 15W
 	lastDow        []int    // 5L: last Friday
@@ -182,7 +182,7 @@ func detect(text string) Dialect {
 		return Systemd
 	}
 	for _, f := range fields {
-		if strings.Contains(f, ":") || strings.Contains(f, "..") || strings.Count(f, "-") >= 2 {
+		if strings.ContainsAny(f, ":~") || strings.Contains(f, "..") || strings.Count(f, "-") >= 2 {
 			return Systemd
 		}
 	}
@@ -335,7 +335,13 @@ func (s *Schedule) parseQuartzDom(t string) error {
 		up := strings.ToUpper(p)
 		switch {
 		case up == "L":
-			s.lastDay = true
+			s.fromEnd = append(s.fromEnd, 1)
+		case strings.HasPrefix(up, "L-"):
+			n, err := strconv.Atoi(up[2:])
+			if err != nil || n < 1 || n > 30 {
+				return fmt.Errorf("day-of-month: %q must be L-1 through L-30 (L-nW is not supported)", p)
+			}
+			s.fromEnd = append(s.fromEnd, n+1)
 		case up == "LW":
 			s.lastWeekday = true
 		case strings.HasSuffix(up, "W"):

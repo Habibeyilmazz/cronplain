@@ -35,7 +35,7 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 	if s.Reboot {
 		return out
 	}
-	quartzExt := s.lastDay || s.lastWeekday || len(s.nearestWeekday) > 0 || len(s.lastDow) > 0 || len(s.nthDow) > 0
+	quartzExt := len(s.fromEnd) > 0 || s.lastWeekday || len(s.nearestWeekday) > 0 || len(s.lastDow) > 0 || len(s.nthDow) > 0
 
 	if len(s.Next(from, time.UTC, 1)) == 0 {
 		warn("This schedule never fires in the next 100 years.%s", s.impossibleDays())
@@ -98,7 +98,7 @@ func (s *Schedule) Lints(from time.Time) []Lint {
 
 // impossibleDays explains a never-firing day-of-month/month combination such as 30 February.
 func (s *Schedule) impossibleDays() string {
-	if s.dom.star || !s.dow.star {
+	if s.dom.star || !s.dow.star || len(s.dom.items) == 0 {
 		return ""
 	}
 	var days, months []string

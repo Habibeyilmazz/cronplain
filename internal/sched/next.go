@@ -53,8 +53,13 @@ func lastWeekday(y int, m time.Month) int {
 }
 
 func (s *Schedule) matchDom(y int, m time.Month, d int) bool {
-	if s.dom.has(d) || (s.lastDay && d == daysIn(y, m)) || (s.lastWeekday && d == lastWeekday(y, m)) {
+	if s.dom.has(d) || (s.lastWeekday && d == lastWeekday(y, m)) {
 		return true
+	}
+	for _, n := range s.fromEnd {
+		if d == daysIn(y, m)+1-n {
+			return true
+		}
 	}
 	for _, n := range s.nearestWeekday {
 		if d == nearestWeekday(y, m, n) {

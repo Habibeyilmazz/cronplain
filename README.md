@@ -59,11 +59,11 @@ Daylight saving time:
   | macros | `@daily`, `@hourly`, `@reboot` | `@reboot` is explained but has no times |
   | `CRON_TZ=` / `TZ=` prefix | `CRON_TZ=Europe/Istanbul 0 9 * * *` | evaluates in that zone |
   | seconds first (Spring, robfig/cron) | `0 */5 * * * *` | 6 fields without `?` |
-  | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
-  | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
+  | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
+  | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
   | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works; always evaluated in UTC |
 
-  Supported **not** yet: systemd `~` (days from the end of the month) and fractional seconds, Quartz `L-3` offsets, wrap-around ranges such as `FRI-MON` in crontab syntax. Each one is rejected with a message rather than guessed.
+  Not supported yet: systemd fractional seconds, Quartz `L-nW`, wrap-around ranges such as `FRI-MON` in crontab syntax. Each one is rejected with a message rather than guessed.
   Quartz extensions in a 5-field crontab are rejected with an explanation, because Vixie cron, cronie and GitHub Actions do not accept them.
 
 - **Next runs in any IANA zone** (`-tz`, default: the machine's zone), up to 500, as text or `-json`.
@@ -125,7 +125,6 @@ go test -race ./...
 
 ## Roadmap
 
-- systemd `~` last-day syntax and Quartz `L-n` offsets.
 - Optional token so pings can come from other machines through a reverse proxy.
 - A `/ping/<id>/fail` endpoint and a short ping history per job.
 - A static, offline build of the explainer page (today it is served by `cronplain serve`).
