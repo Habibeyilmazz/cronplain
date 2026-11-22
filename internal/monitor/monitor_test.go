@@ -63,6 +63,8 @@ func TestStatus(t *testing.T) {
 	// but it runs a */15 job in both passes through 01:00-02:00.
 	fallback, _ := sched.Parse("30 1 * * *", sched.Cron)
 	quarter, _ := sched.Parse("*/15 * * * *", sched.Cron)
+	// EventBridge Scheduler runs only the second 01:30, so the first pass is not late.
+	aws, _ := sched.Parse("CRON_TZ=America/New_York cron(30 1 * * ? *)", sched.Auto)
 	for _, c := range []struct {
 		s              *sched.Schedule
 		ping, now, due string
@@ -70,6 +72,7 @@ func TestStatus(t *testing.T) {
 	}{
 		{fallback, "2027-11-07T01:31:00-04:00", "2027-11-07T01:40:00-05:00", "2027-11-08T01:30:00-05:00", StateUp},
 		{quarter, "2027-11-07T01:46:00-04:00", "2027-11-07T01:20:00-05:00", "2027-11-07T01:00:00-05:00", StateLate},
+		{aws, "2027-11-06T01:31:00-04:00", "2027-11-07T01:45:00-04:00", "2027-11-07T01:30:00-05:00", StateUp},
 	} {
 		state, due := Status(Job{LastPing: ptr(c.ping)}, c.s, ny, ts(t, c.now))
 		if state != c.want || !due.Equal(ts(t, c.due)) {

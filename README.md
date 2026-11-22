@@ -62,9 +62,10 @@ Daylight saving time:
   | Quartz | `0 0 12 ? * 6#3`, `0 0 12 L * ?`, `0 0 12 15W * ?` | `?`, `L`, `L-n`, `LW`, `nW`, `nL`, `n#k`, optional year; days 1-7 = Sunday-Saturday |
   | systemd `OnCalendar=` | `Mon..Fri *-*-* 09:00 Europe/Istanbul` | weekdays, `[YYYY-]MM-DD`, `~` days from the month's end (`*-02~03`, `Mon *-05~07/1`), `HH:MM[:SS]`, lists, `..` ranges, `/` steps, zone suffix, `daily`/`weekly`/... |
   | GitHub Actions | `- cron: '30 5 * * 1'` | pasted YAML line works; always evaluated in UTC |
-  | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone |
+  | AWS EventBridge (CloudWatch Events, EventBridge Scheduler) | `cron(0 9 ? * MON-FRI *)` | minute hour day-of-month month day-of-week year; the `cron(...)` wrapper is optional; the Quartz day rules above (`?`, `L`, `nW`, `n#k`, days 1-7 = Sunday-Saturday) plus AWS's limits (no `/` in day-of-week, only one value with `#`); evaluated in UTC unless you prefix `CRON_TZ=Zone` for a Scheduler time zone, and then a time repeated when DST ends runs once, in the second pass, as EventBridge Scheduler does |
 
   AWS `rate(...)` and `at(...)` schedules are rejected with a note: they have no calendar pattern to explain. AWS documents only `L`, `W` and `#` among the extensions; cronplain also accepts Quartz's `L-n` and `LW` there, so check those in the AWS console.
+  Quartz and AWS accept ranges that wrap past the end of a field (`20-2` in hours, `FRI-MON`), as both schedulers do.
   Not supported yet: systemd fractional seconds, Quartz `L-nW`, wrap-around ranges such as `FRI-MON` in crontab syntax. Each one is rejected with a message rather than guessed.
   Quartz extensions in a 5-field crontab are rejected with an explanation, because Vixie cron, cronie and GitHub Actions do not accept them.
 

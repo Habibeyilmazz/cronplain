@@ -95,6 +95,9 @@ func dstText(ev DSTEvent, d Dialect, fixed bool) string {
 		}
 		return text
 	}
+	if d == AWS {
+		return head + fmt.Sprintf(" EventBridge Scheduler runs %s only once, in the second pass after the clocks fall back, so that is the run listed.", times)
+	}
 	text := head + fmt.Sprintf(" %s happens twice and is listed twice.", times)
 	if d == Cron && fixed {
 		text += " Vixie cron and cronie run such fixed-time jobs only once."

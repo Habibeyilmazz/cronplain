@@ -163,6 +163,14 @@ func (s *Schedule) Next(from time.Time, loc *time.Location, n int) []Run {
 			var runs []Run
 			for _, t := range times {
 				inst := resolve(y, m, d, t[0], t[1], t[2], loc)
+				if s.Dialect == AWS && len(inst) == 2 { // EventBridge Scheduler runs a repeated wall time once, after the clocks fall back
+					later := inst[0]
+					if inst[1].After(later) {
+						later = inst[1]
+					}
+					runs = append(runs, Run{Time: later, Repeated: true})
+					continue
+				}
 				for k, it := range inst {
 					runs = append(runs, Run{Time: it, Repeated: len(inst) > 1, Again: len(inst) == 2 && it.After(inst[1-k])})
 				}

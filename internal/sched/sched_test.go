@@ -103,6 +103,10 @@ func TestParseErrors(t *testing.T) {
 		{"cron(0 12 ? * MON 2200)", Auto, "year: 2200"},
 		{"rate(5 minutes)", Auto, "no clock times"},
 		{"at(2026-12-01T09:00:00)", Auto, "one-time"},
+		{"cron(0 9 ? * 3#1,6#3 *)", Auto, "only one value"},
+		{"cron(0 9 ? * MON/2 *)", Auto, "does not accept /"},
+		{"0 22-2 * * *", Auto, "goes backwards"},
+		{"0 0 22-2 * * *", Auto, "goes backwards"},
 	}
 	for _, c := range cases {
 		_, err := Parse(c.expr, c.dialect)
@@ -242,6 +246,16 @@ func TestNext(t *testing.T) {
 			[]string{"2027-11-26T10:15:00Z", "2027-12-31T10:15:00Z"}},
 		{"AWS L is the last day of the month", "cron(0 0 L * ? *)", "UTC", "2028-02-01T00:00:00Z",
 			[]string{"2028-02-29T00:00:00Z", "2028-03-31T00:00:00Z"}},
+		{"AWS wrap-around hours (AWS's own example)", "cron(0/30 20-2 ? * MON-FRI *)", "UTC", "2026-11-23T01:45:00Z",
+			[]string{"2026-11-23T02:00:00Z", "2026-11-23T02:30:00Z", "2026-11-23T20:00:00Z"}},
+		{"wrap-around step carries over midnight", "cron(0 22-2/3 * * ? *)", "UTC", "2026-11-22T12:00:00Z",
+			[]string{"2026-11-22T22:00:00Z", "2026-11-23T01:00:00Z", "2026-11-23T22:00:00Z"}},
+		{"quartz wrap-around weekdays", "0 0 12 ? * FRI-MON", "UTC", "2026-11-23T13:00:00Z",
+			[]string{"2026-11-27T12:00:00Z", "2026-11-28T12:00:00Z", "2026-11-29T12:00:00Z", "2026-11-30T12:00:00Z", "2026-12-04T12:00:00Z"}},
+		{"AWS wrap-around days of the month", "cron(0 0 30-2 * ? *)", "UTC", "2027-02-01T00:00:00Z",
+			[]string{"2027-02-02T00:00:00Z", "2027-03-01T00:00:00Z", "2027-03-02T00:00:00Z", "2027-03-30T00:00:00Z"}},
+		{"AWS Scheduler runs a repeated time once, in the second pass", "CRON_TZ=America/New_York cron(30 1 * * ? *)", "UTC", "2027-11-06T12:00:00Z",
+			[]string{"2027-11-07T01:30:00-05:00", "2027-11-08T01:30:00-05:00"}},
 		{"AWS Scheduler zone via CRON_TZ skips the DST gap", "CRON_TZ=America/New_York cron(30 2 ? * SUN *)", "UTC", "2027-03-07T12:00:00Z",
 			[]string{"2027-03-21T02:30:00-04:00"}},
 	}
@@ -373,6 +387,13 @@ func TestExplain(t *testing.T) {
 	}
 	if !strings.Contains(e.DST[0], "at 02:00 EST (now 03:00 EDT)") {
 		t.Errorf("DST note should name the clock change: %q", e.DST[0])
+	}
+	a, err := Explain("CRON_TZ=America/New_York cron(30 1 * * ? *)", Auto, time.UTC, 3, at(t, "2027-11-06T12:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.DST) != 1 || !strings.Contains(a.DST[0], "runs 01:30 only once, in the second pass") || !a.Runs[0].Repeated {
+		t.Errorf("AWS fall-back explanation = %+v", a)
 	}
 	g, err := Explain("- cron: '0 9 * * 1'", Auto, zone(t, "Europe/Istanbul"), 1, at(t, "2026-11-22T00:00:00Z"))
 	if err != nil {

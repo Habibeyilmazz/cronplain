@@ -93,21 +93,24 @@ type spec struct {
 	name   string
 	lo, hi int
 	names  map[string]int
+	wrap   bool // Quartz and AWS read a backwards range such as 20-2 as wrapping past the end
 }
+
+func (sp spec) wrapping() spec { sp.wrap = true; return sp }
 
 var (
 	monthNames = map[string]int{"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
 	dowNames   = map[string]int{"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
 	quartzDow  = map[string]int{"sun": 1, "mon": 2, "tue": 3, "wed": 4, "thu": 5, "fri": 6, "sat": 7}
 
-	secSpec   = spec{"second", 0, 59, nil}
-	minSpec   = spec{"minute", 0, 59, nil}
-	hourSpec  = spec{"hour", 0, 23, nil}
-	domSpec   = spec{"day-of-month", 1, 31, nil}
-	monSpec   = spec{"month", 1, 12, monthNames}
-	dowSpec   = spec{"day-of-week", 0, 7, dowNames}
-	qDowSpec  = spec{"day-of-week", 1, 7, quartzDow}
-	yearSpec  = spec{"year", 1970, 2199, nil}
+	secSpec   = spec{"second", 0, 59, nil, false}
+	minSpec   = spec{"minute", 0, 59, nil, false}
+	hourSpec  = spec{"hour", 0, 23, nil, false}
+	domSpec   = spec{"day-of-month", 1, 31, nil, false}
+	monSpec   = spec{"month", 1, 12, monthNames, false}
+	dowSpec   = spec{"day-of-week", 0, 7, dowNames, false}
+	qDowSpec  = spec{"day-of-week", 1, 7, quartzDow, false}
+	yearSpec  = spec{"year", 1970, 2199, nil, false}
 	macroDefs = map[string]string{
 		"@yearly": "0 0 1 1 *", "@annually": "0 0 1 1 *", "@monthly": "0 0 1 * *",
 		"@weekly": "0 0 * * 0", "@daily": "0 0 * * *", "@midnight": "0 0 * * *", "@hourly": "0 * * * *",
@@ -262,17 +265,23 @@ func (s *Schedule) parseCron(text string) error {
 		s.hasSeconds = true
 	}
 	quartz := d == Quartz || d == AWS
+	sp := func(x spec) spec {
+		if quartz {
+			return x.wrapping()
+		}
+		return x
+	}
 	var err error
-	if s.sec, err = parseField(f[0], secSpec); err != nil {
+	if s.sec, err = parseField(f[0], sp(secSpec)); err != nil {
 		return err
 	}
-	if s.min, err = parseField(f[1], minSpec); err != nil {
+	if s.min, err = parseField(f[1], sp(minSpec)); err != nil {
 		return err
 	}
-	if s.hour, err = parseField(f[2], hourSpec); err != nil {
+	if s.hour, err = parseField(f[2], sp(hourSpec)); err != nil {
 		return err
 	}
-	if s.month, err = parseField(f[4], monSpec); err != nil {
+	if s.month, err = parseField(f[4], sp(monSpec)); err != nil {
 		return err
 	}
 	domText, dowText := f[3], f[5]
@@ -280,6 +289,12 @@ func (s *Schedule) parseCron(text string) error {
 		if !quartz && strings.ContainsAny(strings.ToUpper(t), "LW#") && !isNameField(t) {
 			return fmt.Errorf("%q uses a Quartz extension (L, W or #); Vixie cron, cronie and GitHub Actions reject it. Write a 6/7-field Quartz expression (sec min hour dom month dow [year]) to use it", t)
 		}
+	}
+	if d == AWS && strings.Contains(dowText, "/") {
+		return fmt.Errorf("day-of-week: AWS does not accept / here; list the days instead (e.g. MON,WED,FRI)")
+	}
+	if d == AWS && strings.Contains(dowText, "#") && strings.Contains(dowText, ",") {
+		return fmt.Errorf("day-of-week: with # AWS accepts only one value (%q is not valid); use one schedule per day", dowText)
 	}
 	if quartz {
 		if (domText == "?") == (dowText == "?") {
@@ -380,7 +395,7 @@ func (s *Schedule) parseQuartzDom(t string) error {
 		}
 	}
 	if len(rest) > 0 {
-		f, err := parseField(strings.Join(rest, ","), domSpec)
+		f, err := parseField(strings.Join(rest, ","), domSpec.wrapping())
 		if err != nil {
 			return err
 		}
@@ -433,7 +448,7 @@ func (s *Schedule) parseQuartzDow(t string) error {
 		}
 	}
 	if len(rest) > 0 {
-		f, err := parseField(strings.Join(rest, ","), qDowSpec)
+		f, err := parseField(strings.Join(rest, ","), qDowSpec.wrapping())
 		if err != nil {
 			return err
 		}
@@ -483,7 +498,7 @@ func parseField(t string, sp spec) (field, error) {
 		return f, fmt.Errorf("%s: empty field", sp.name)
 	}
 	for _, part := range strings.Split(t, ",") {
-		it := item{step: 1}
+		it, wrapped := item{step: 1}, item{}
 		rng, stepText, hasStep := strings.Cut(part, "/")
 		if hasStep {
 			n, err := strconv.Atoi(stepText)
@@ -511,10 +526,19 @@ func parseField(t string, sp spec) (field, error) {
 			if err != nil {
 				return f, err
 			}
-			if lo > hi {
-				return f, fmt.Errorf("%s: range %s goes backwards (wrap-around ranges are not supported by Vixie cron; split it into two)", sp.name, rng)
-			}
 			it.lo, it.hi = lo, hi
+			if lo > hi {
+				if !sp.wrap {
+					return f, fmt.Errorf("%s: range %s goes backwards (wrap-around ranges are not supported by Vixie cron; split it into two)", sp.name, rng)
+				}
+				// 22-2/3 is 22, then 1: the step carries over the end of the field
+				it.hi = sp.hi
+				if sp.name == "day-of-week" && sp.lo == 0 {
+					it.hi = 6
+				}
+				last := lo + (it.hi-lo)/it.step*it.step
+				wrapped = item{lo: last + it.step - (it.hi - sp.lo + 1), hi: hi, step: it.step}
+			}
 		default:
 			v, err := parseValue(rng, sp)
 			if err != nil {
@@ -525,12 +549,17 @@ func parseField(t string, sp spec) (field, error) {
 				it.hi, it.star = sp.hi, v == sp.lo
 			}
 		}
-		f.items = append(f.items, it)
-		if sp.name == "year" {
-			continue
-		}
-		for v := it.lo; v <= it.hi; v += it.step {
-			f.bits |= 1 << uint(v)
+		for _, it := range []item{it, wrapped} {
+			if it.step == 0 || it.lo > it.hi {
+				continue // no wrapped part
+			}
+			f.items = append(f.items, it)
+			if sp.name == "year" {
+				continue
+			}
+			for v := it.lo; v <= it.hi; v += it.step {
+				f.bits |= 1 << uint(v)
+			}
 		}
 	}
 	return f, nil

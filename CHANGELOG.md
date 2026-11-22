@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added (feature round 4)
 - AWS EventBridge schedules: `cron(0 9 ? * MON-FRI *)` (also quoted, as pasted from Terraform or CloudFormation) or the bare six fields `minute hour day-of-month month day-of-week year`, detected automatically or with `-dialect aws-eventbridge`. Before, `cron(0 12 * * ? *)` failed with `second: "cron(0" is not a number`. Uses the Quartz day rules (`?`, `L`, `nW`, `n#k`, 1 = Sunday); evaluated in UTC like EventBridge rules, or in the zone of a `CRON_TZ=` prefix (EventBridge Scheduler time zones). Lints: UTC, and 1 = Sunday when the weekday field has numbers. `rate(...)` and `at(...)` get an explanation instead of a parse error. Works in the web explainer (syntax option, field labels, example button) and for monitor jobs.
+- Quartz and AWS ranges that wrap past the end of a field (`20-2` hours, `FRI-MON`, `30-2` days); a step carries over (`22-2/3` is 22:00 and 01:00). Crontab syntax still rejects them, as Vixie cron does.
+
+### Fixed (feature round 4, Codex review of the AWS commit, each checked against the AWS docs)
+- AWS's own documented example `cron(0/30 20-2 ? * MON-FRI *)` was rejected ("range goes backwards").
+- AWS: `/` in day-of-week and more than one value next to `#` (`3#1,6#3`) were accepted; AWS rejects both, and now so does cronplain.
+- AWS with a `CRON_TZ=` zone listed a time repeated when DST ends twice; EventBridge Scheduler runs it once, in the second pass. Runs, the DST note and the monitor's due time now follow that.
 
 ### Security (round 3)
 - Failed webhook/ntfy deliveries printed the full URL (`Post "https://hooks.example/T0/SECRET": ...`), leaking webhook secrets and ntfy topics into logs. Only the host and the network error are printed now.
