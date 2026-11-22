@@ -54,6 +54,13 @@ test("explain: description, runs, wrapped range and an invalid field", async () 
   await page.waitForFunction(() => document.querySelector("#expr").getAttribute("aria-invalid") === "true");
   assert.match(await text("#sentence"), /minute: 61 is out of range 0-59/);
   assert.equal(await page.locator("#results").isHidden(), true);
+  assert.equal(await text("#fields .bad"), "61minute"); // the field the error names is marked
+
+  await page.selectOption("#dialect", "aws-eventbridge");
+  await page.fill("#expr", "cron(0 9 32 * ? *)");
+  await page.waitForFunction(() => document.querySelector("#fields .bad"));
+  assert.equal(await text("#fields .bad"), "32day of month");
+  await page.selectOption("#dialect", "auto");
 
   await page.fill("#expr", "0 0 30 2 *");
   await page.waitForFunction(() => document.querySelector("#lints").textContent.includes("never fires"));
@@ -93,6 +100,13 @@ test("monitor: add a job, report a failure, then a success, delete it", async ()
   await page.waitForSelector("#jobs table");
   assert.equal(await text("#jobs tbody .state"), "Failed");
   assert.match(await text("#jobs tbody"), /failed \d+s ago/);
+  assert.equal(await page.title(), "(1) cronplain");
+
+  // A failed job is listed before healthy ones, whatever its name.
+  await fetch(`${base}/api/jobs`, { method: "POST", body: JSON.stringify({ id: "a-first", schedule: "0 4 * * *", tz: "UTC", grace_seconds: 60 }) });
+  await page.evaluate(() => loadJobs());
+  assert.deepEqual(await page.locator("#jobs tbody strong").allTextContents(), ["nightly-backup", "a-first"]);
+  await fetch(`${base}/api/jobs/a-first`, { method: "DELETE" });
 
   // The next run succeeds.
   assert.equal((await fetch(`${base}/ping/nightly-backup/0`)).status, 200);

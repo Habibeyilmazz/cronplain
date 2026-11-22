@@ -52,9 +52,12 @@ nav a[aria-current="page"] { background: var(--ink); color: var(--paper); }
 .fields div { display: flex; flex-direction: column; }
 .fields code { font: 600 18px/1.3 var(--mono); border-bottom: 3px solid var(--accent); padding-bottom: 2px; align-self: flex-start; }
 .fields span { font-size: 13px; color: var(--muted); }
+.fields .bad code { border-color: var(--late); color: var(--late); }
+.fields .bad span { color: var(--late); font-weight: 600; }
 .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 16px; align-items: end; }
 .controls label { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); gap: 4px; }
 input, select { font: inherit; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 7px 10px; }
+.controls :is(input, select), form.add :is(input, .btn) { height: 2.375rem; } /* a select and a button are not as tall as an input by default */
 #tz { width: 220px; }
 #n { width: 80px; }
 .examples { font-size: 14px; color: var(--muted); margin-top: 14px; }
@@ -117,7 +120,7 @@ form.add input { width: 100%; }
 #msg { min-height: 1.5em; font-size: 15px; padding-bottom: 48px; }
 @media (max-width: 760px) {
   form.add { grid-template-columns: 1fr 1fr; }
-  form.add .btn { grid-column: 1 / -1; padding: 10px 16px; }
+  form.add .btn { grid-column: 1 / -1; height: 2.75rem; }
   .actions { justify-content: flex-start; padding-top: 4px; }
   .jobs thead { display: none; }
   .jobs, .jobs tbody, .jobs tr, .jobs td { display: block; width: 100%; }
@@ -127,6 +130,7 @@ form.add input { width: 100%; }
   .jobs td:last-child { padding-bottom: 14px; }
   .jobs td[data-label]::before { content: attr(data-label); color: var(--muted); }
   .jobs td[data-label] .desc { display: inline; margin-left: 6px; }
+  .jobs td[data-label] .desc.fail { display: block; margin-left: 0; } /* inline it read "never failed 2 min ago" */
 }
 [hidden] { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -228,7 +232,7 @@ function show() {
     const a = $(`nav a[href="#${k}"]`);
     if (k === name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
-  if (name === "monitor") loadJobs();
+  if (name === "monitor") loadJobs(); else document.title = "cronplain"; // the job count is only kept fresh on Monitor
 }
 $("#ping-example").textContent = `; curl -fsS ${location.origin}/ping/JOB-NAME/$?`;
 
@@ -248,14 +252,23 @@ const labels = {
   "aws-eventbridge": ["minute", "hour", "day of month", "month", "day of week", "year"],
   systemd: null,
 };
-function drawFields(expr, dialect) {
+function drawFields(expr, dialect, bad) { // bad: the label of the field an error names
   const toks = expr.split(/\s+/).filter(Boolean);
   const names = labels[dialect];
   if (!names || expr.startsWith("@") || toks.length !== names.length && !(dialect === "quartz" && toks.length === 6)) {
     $("#fields").innerHTML = "";
     return;
   }
-  $("#fields").innerHTML = toks.map((t, i) => `<div><code>${esc(t)}</code><span>${names[i]}</span></div>`).join("");
+  $("#fields").innerHTML = toks.map((t, i) => `<div${names[i] === bad ? ' class="bad"' : ""}><code>${esc(t)}</code><span>${names[i]}</span></div>`).join("");
+}
+// markBadField underlines the field an error like "day-of-month: 32 is out of range" names,
+// when the field layout is certain: a chosen syntax, or five fields (crontab) on Detect.
+function markBadField(expr, error) {
+  const m = /^(second|minute|hour|day-of-month|month|day-of-week|year): /.exec(error);
+  expr = expr.replace(/^(["']?)cron\((.*)\)\1$/, "$2");
+  const n = expr.split(/\s+/).filter(Boolean).length;
+  const dialect = $("#dialect").value === "auto" ? (n === 5 ? "cron" : null) : $("#dialect").value;
+  if (m && dialect) drawFields(expr, dialect, m[1].replace(/-/g, " "));
 }
 
 let timer, seq = 0;
@@ -277,7 +290,9 @@ async function explain() {
   if (data.error) {
     // The API names a bad zone or run count; anything else is about the expression.
     const bad = data.offline ? null : /^unknown time zone/.test(data.error) ? "#tz" : /^n must be/.test(data.error) ? "#n" : "#expr";
-    return clear(`<span class="error">${esc(data.error.replace(/^n must be/, "Runs must be"))}</span>`, bad);
+    clear(`<span class="error">${esc(data.error.replace(/^n must be/, "Runs must be"))}</span>`, bad);
+    if (bad === "#expr") markBadField(expr, data.error);
+    return;
   }
   for (const id of ["#expr", "#tz", "#n"]) { $(id).removeAttribute("aria-invalid"); $(id).removeAttribute("aria-describedby"); }
   $("#sentence").classList.remove("stale");
@@ -364,6 +379,11 @@ async function jobsTable() {
   } catch (e) {
     return `<div class="empty error" role="alert">${esc(unreachable)}</div>`;
   }
+  // Jobs that need attention come first, and a background tab shows how many there are.
+  const rank = { failed: 0, late: 1 };
+  jobs.sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2));
+  const trouble = jobs.filter((j) => j.state in rank).length;
+  document.title = trouble ? `(${trouble}) cronplain` : "cronplain";
   if (!jobs.length) return `<div class="empty">No jobs yet. Add the first one below.</div>`;
   return `<table class="jobs"><thead><tr><th>Status</th><th>Job</th><th>Last success</th><th>Ping expected by</th><th><span class="sr">Actions</span></th></tr></thead><tbody>` +
     jobs.map((j) => {
@@ -372,7 +392,7 @@ async function jobsTable() {
       return `<tr>
         <td><span class="state ${esc(j.state)}"${j.state === "new" ? ' title="No ping yet; the first one is expected by the time shown"' : ""}>${esc(stateText[j.state] || j.state)}</span></td>
         <td><strong>${esc(j.id)}</strong><br><code>${esc(j.schedule)}</code><div class="desc">${esc(j.description)}<br>${esc(j.tz)}, ${Math.round(j.grace_seconds / 60)} min grace</div></td>
-        <td data-label="Last success: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span>${j.last_fail ? `<div class="desc when" title="${esc(j.last_fail)}">failed ${esc(ago(j.last_fail))}</div>` : ""}</td>
+        <td data-label="Last success: " title="${esc(j.last_ping || "")}"><span class="when">${esc(ago(j.last_ping))}</span>${j.last_fail ? `<div class="desc when fail" title="${esc(j.last_fail)}">failed ${esc(ago(j.last_fail))}</div>` : ""}</td>
         <td data-label="Ping expected by: ">${due ? `<span class="when" title="${esc(due.toString())}">${esc(due.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }))}</span><div class="desc">${esc(until(j.due))}</div>` : "–"}</td>
         <td><div class="actions"><button class="btn" type="button" data-copy="${esc(cmd)}" title="${esc(cmd)}" aria-label="Copy ping for ${esc(j.id)}">Copy ping</button><button class="btn danger" type="button" data-del="${esc(j.id)}" aria-label="Delete ${esc(j.id)}">Delete</button></div></td>
       </tr>`;
