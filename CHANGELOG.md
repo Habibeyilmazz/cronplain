@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `audit` did not flag `cmd 2>/dev/null`, `cmd 2>&1` or `cmd 2>>err.log`: any `>` counted as handled output, but each of these still mails stdout. Only stdout redirections count now.
 - `cronplain explain -h` (and `audit`, `serve`) exited 2 after printing the help; asking for help now exits 0.
 - `serve` printed the database as `cronplain.db`; it now prints the full path, and the README says the default is relative to the current directory (start `serve` elsewhere and the jobs seem gone).
+- Dashboard: a ping time a moment in the future (browser clock slightly behind) read "in in 2s".
 - Dashboard: a refused job name only said "Please match the requested format."; the field now says lowercase letters, digits, `-` and `_`.
 
 ### Notes for the next person (round 9)
