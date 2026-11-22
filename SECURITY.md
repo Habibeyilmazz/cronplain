@@ -8,7 +8,7 @@ No version has been released yet. Fixes go to the `main` branch; build from it o
 
 `cronplain serve` is the part that matters most: it runs an HTTP server with no login, so it binds only to loopback addresses, checks the `Host` header, refuses cross-site requests and pings, and sends a strict Content-Security-Policy. A way around any of these, a way to read or change jobs from another origin, a crash from input, or a webhook URL or ntfy topic leaking into logs is a security bug.
 
-Out of scope: anything that needs an attacker who can already run commands as your user on the machine, and putting `serve` behind your own reverse proxy (it is not designed for that yet).
+Out of scope: anything that needs an attacker who can already run commands as your user on the machine, other user accounts on the same machine reaching the loopback port (documented: there is no login), and putting `serve` behind your own reverse proxy (it is not designed for that yet).
 
 ## Reporting a vulnerability
 

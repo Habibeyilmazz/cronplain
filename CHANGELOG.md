@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (security round 11; each reproduced with a failing test first)
+- Webhook and ntfy alerts followed redirects. On a `301`/`302` Go resends the `POST` as a `GET` without the body, so a webhook URL that redirects (an `http://` URL moved to `https://`, say) could answer 200 and the alert was lost without a log line; on a `307`/`308` the alert went to whatever host the `Location` header named. Redirects are now not followed: the delivery is logged as failed (`HTTP 302 (a redirect, not followed: use the URL it points to)`), without the target URL, and not retried.
+- Terminal escape injection: errors and audit findings echo parts of the input (`unknown macro @x...`, a command name in the PATH warning), so a crafted crontab or expression could send ESC sequences to the terminal (clear the screen, retitle the window, hide earlier findings). `explain`, `audit` and `serve` now print control characters other than newline and tab, and invalid UTF-8 bytes, as Go escapes (`\x1b`). `-json` output was already escaped.
+
+### Added (security round 11)
+- `FuzzRun` for `audit`, which reads crontabs written by others: 90 s locally (22M inputs, user and system format), no panic.
+- README and SECURITY.md say that other user accounts on the same machine can reach the loopback dashboard (no login).
+
+### Notes for the next person (round 11)
+- Checked by running, nothing to change: `serve` on 127.0.0.1:4231 refused a foreign `Host` (`evil.example`, `127.0.0.1.`, none), a cross-site `POST`, a cross-site `GET` ping, and `tz=../../etc/passwd` / `/etc/passwd` (Go's `LoadLocation` rejects them); expressions over 512 bytes are refused, and the slowest Quartz inputs within that answer in about 10 ms. `FuzzExplain` 60 s: no panic. SQL uses placeholders only; every value the page puts in `innerHTML` goes through `esc`, and the CSP allows only the page's script by hash.
+- Dependencies: `npm audit` (e2e) 0 vulnerabilities; govulncheck clean with Go 1.26.11 from `go.mod` (CI). The machine's Go 1.27.3 is hit by GO-2026-6859 (fixed in 1.27.4); this does not affect CI or release builds, which use `go.mod`'s version. No secrets, tokens or personal e-mail addresses in git history (all commits use the noreply address). Workflows: `contents: read` by default, `contents: write` only on the tag-triggered release job, actions pinned to commit SHAs, `persist-credentials: false`, no caches on release.
+- Left as is: `audit` takes about 1 ms per every-minute job for collision analysis (20,000 `* * * * *` lines: 22 s), linear and bounded by the 4 MiB limit. `serve` has `ReadHeaderTimeout` but no read/idle timeout; only local processes can connect. The `security-review` skill could not run this round (it needs the session's working directory to be the git repository), so the review was done by hand.
+- Reported gaps unchanged: a retry that fails at shutdown is still lost (documented `shortcut:`), no TypeScript explainer, AWS `L-n`/`LW` unverified, no caret under the bad field in CLI errors.
+
 ### Fixed (design round 10; each seen in screenshots of the running app first)
 - `audit` missed `a > log; b`: any `>` on the line counted as handled output, but a redirect binds to one command of a `;` or `&&` list, so b's output is still mailed. Each part of such a list is now checked; `cd`, `test`/`[`, `true`, `sleep`, `export` and a silent `curl`/`wget` (the README's ping line) count as quiet, a part after `||` counts as a deliberate failure mail (`|| echo failed`), `{ a; b; } > log` and quoted `;` are not split, and `if ...; then ...; fi` lines are left out.
 - Dashboard on phones: "Last success: never failed 2 min ago" read as "never failed"; the failure time now has its own line.

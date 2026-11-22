@@ -137,7 +137,7 @@ The page follows the system light or dark theme, works at phone width, and is us
 
 <br clear="right">
 
-The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat). The page's Content-Security-Policy allows only its own script, by hash, and no framing. A failed alert delivery logs the host only, never the webhook path or ntfy topic, which often act as secrets.
+The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding), cross-site `POST`/`DELETE` from browsers, and pings a browser marks as cross-site (so a web page cannot fake a heartbeat). The page's Content-Security-Policy allows only its own script, by hash, and no framing. A failed alert delivery logs the host only, never the webhook path or ntfy topic, which often act as secrets. Loopback is not private to your user: on a machine shared with other accounts, any of them can open the dashboard, change jobs or send pings, so run `serve` there only if you trust them.
 
 ## How it works
 
