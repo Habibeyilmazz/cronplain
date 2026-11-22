@@ -106,6 +106,7 @@ cronplain serve -db ~/.cronplain.db -ntfy my-server-jobs
 
 Alerts always go to the terminal, and optionally to `-webhook URL` (JSON `POST` with `job`, `state`, `schedule`, `due`, `last_ping`, `message`) and to an ntfy topic (`-ntfy TOPIC`, `-ntfy-server` defaults to `https://ntfy.sh`).
 Jobs and ping times live in one SQLite file (`-db`). Pings accept `GET`, `POST` or `HEAD`.
+Adding a job under an existing name updates its schedule, zone and grace and keeps its last ping; the page says so.
 
 The dashboard has no login, so `serve` only binds to loopback addresses and refuses anything else. It also rejects requests with a foreign `Host` header (DNS rebinding) and cross-site `POST`/`DELETE` from browsers.
 

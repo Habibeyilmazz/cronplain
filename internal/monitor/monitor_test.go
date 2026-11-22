@@ -198,8 +198,11 @@ func TestEndToEnd(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "<title>cronplain</title>") {
 		t.Fatalf("index: %d", code)
 	}
-	if code, body = h.do(t, "POST", "/api/jobs", `{"id":"backup","schedule":"0 3 * * *","tz":"UTC","grace_seconds":300}`, nil); code != 200 {
+	if code, body = h.do(t, "POST", "/api/jobs", `{"id":"backup","schedule":"0 3 * * *","tz":"UTC","grace_seconds":300}`, nil); code != 200 || !strings.Contains(body, `"updated":false`) {
 		t.Fatalf("add: %d %s", code, body)
+	}
+	if code, body = h.do(t, "POST", "/api/jobs", `{"id":"backup","schedule":"0 3 * * *","tz":"UTC","grace_seconds":300}`, nil); code != 200 || !strings.Contains(body, `"updated":true`) {
+		t.Fatalf("re-add: %d %s", code, body)
 	}
 	if code, body = h.do(t, "POST", "/api/jobs", `{"id":"x","schedule":"0 0 L * *","tz":"UTC"}`, nil); code != 400 || !strings.Contains(body, "Quartz extension") {
 		t.Errorf("bad add: %d %s", code, body)

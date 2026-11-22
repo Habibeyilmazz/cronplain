@@ -76,12 +76,16 @@ func OpenStore(path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Upsert adds a job or updates its schedule, zone and grace (keeping its ping history).
-func (s *Store) Upsert(j Job) error {
-	_, err := s.db.Exec(`INSERT INTO jobs (id, schedule, tz, grace, created_at) VALUES (?, ?, ?, ?, ?)
+// Upsert adds a job or updates its schedule, zone and grace (keeping its ping history);
+// it reports whether the job already existed.
+func (s *Store) Upsert(j Job) (existed bool, err error) {
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)`, j.ID).Scan(&existed); err != nil {
+		return false, err
+	}
+	_, err = s.db.Exec(`INSERT INTO jobs (id, schedule, tz, grace, created_at) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET schedule = excluded.schedule, tz = excluded.tz, grace = excluded.grace, alerted_due = NULL`,
 		j.ID, j.Schedule, j.TZ, j.Grace, j.CreatedAt.Unix())
-	return err
+	return existed, err
 }
 
 // Delete removes a job; it reports whether the job existed.

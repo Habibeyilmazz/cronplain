@@ -216,11 +216,12 @@ func (s *Server) saveJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	j.CreatedAt = s.now()
-	if err := s.store.Upsert(j); err != nil {
+	existed, err := s.store.Upsert(j)
+	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"ping_path": "/ping/" + j.ID})
+	writeJSON(w, http.StatusOK, map[string]any{"ping_path": "/ping/" + j.ID, "updated": existed})
 }
 
 func (s *Server) deleteJob(w http.ResponseWriter, r *http.Request) {

@@ -340,7 +340,9 @@ $("#add").addEventListener("submit", async (e) => {
   const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await r.json();
   if (!r.ok) { $("#add-msg").innerHTML = `<span class="error">${esc(data.error)}</span>`; return; }
-  $("#add-msg").textContent = `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`;
+  $("#add-msg").textContent = data.updated
+    ? `Updated ${body.id}: new schedule, zone and grace; its last ping is kept.`
+    : `Added ${body.id}. Ping ${location.origin}${data.ping_path} when it succeeds.`;
   e.target.reset();
   document.querySelector('#add [name="tz"]').value = browserZone;
   loadJobs();
