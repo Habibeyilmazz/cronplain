@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (feature round 15)
+- `cronplain audit` reads GitHub Actions workflows. `cronplain audit .github/workflows/nightly.yml` used to read the YAML as a crontab and print one "no command after the schedule" error per line. A file with a `- cron:` line or a top-level `on:`/`jobs:` key is now audited as a workflow: each `- cron:` line is parsed in the GitHub Actions dialect with its warnings (more often than every 5 minutes, never fires, the either-day rule) and notes (UTC, minute 0, default branch: the ones that are the same for every line are printed once), plus two checks of its own: an unquoted schedule starting with `*` (YAML reads it as an alias and GitHub rejects the whole file) and a schedule listed twice. A flow-style `schedule: [{cron: ...}]` is not parsed and gets a note saying so. A workflow without a schedule passes with "0 schedule(s)". `-json` reports carry `"format": "crontab"` or `"github-actions"`.
+- `cronplain audit` takes several files (`audit .github/workflows/*.yml`, `audit /etc/cron.d/* -system`): one report per file under its name, exit 1 if any has a problem; with `-json` a list of reports with a `file` field (one file still prints the bare report, as before).
+- `cronplain import` refuses a workflow file with a message instead of adding pings to YAML lines; `explain` with several `cron:` lines points at `audit`.
+- `examples/nightly.yml`, a made-up workflow used by the README sample and the tests.
+
+### Notes for the next person (round 15)
+- Picked by using the product: auditing the workflows of a repository in CI is the obvious next use of "audit exits 1 on warnings", and it produced 11 nonsense errors for an ordinary workflow. No YAML library was added: the checks read `- cron:` lines, which is how every GitHub example and nearly every workflow writes them; flow style is noted, not guessed.
+- Not checked against GitHub itself: whether two `cron:` lines that match the same minute start the workflow twice, so `audit` does not flag such overlaps (only identical lines). Whether GitHub's scheduler applies the Vixie either-day rule is also unverified; the lint is the one `explain` already printed for the GitHub dialect.
+- Reported gaps re-checked: a retry that fails at shutdown too is still lost (documented `shortcut:` in `internal/monitor/alert.go`), no TypeScript explainer (the page calls `/api/explain`; porting the schedule math to TypeScript or building it to WebAssembly is a bigger, separate piece of work), AWS `L-n`/`LW` unverified (no AWS account), private vulnerability reporting is a repo setting for the owner.
+
 ### Fixed (launch round 14)
 - On macOS a wrong-case zone such as `europe/istanbul` was accepted everywhere (`-tz`, `CRON_TZ=`, a systemd zone suffix, monitor jobs), because the zoneinfo directory there is case-insensitive; Linux and cron on it reject the name, so `audit` passed a crontab on a Mac that would misbehave on the server. One `sched.LoadZone` now requires the exact case on every system (a zone Go takes from its embedded copy because the system database lacks it still loads). `TestLoadZoneCase` fails on macOS without the fix and also checks the logic against a fake case-insensitive directory, so it means something on Linux CI too.
 

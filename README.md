@@ -4,7 +4,7 @@
 
 **Know when your scheduled jobs really run, and hear about it when they don't.**
 
-cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs, and runs a local heartbeat monitor that tells you when a job failed or did not report in.
+cronplain is one small Go binary that explains cron, Quartz, systemd, AWS EventBridge and GitHub Actions schedules in plain English, lists their next runs with daylight-saving changes called out, audits whole crontabs and GitHub Actions workflows, and runs a local heartbeat monitor that tells you when a job failed or did not report in.
 
 ![A 19-second recording of the local web UI: typing 30 2 * * 0 shows that 02:30 does not exist on 14 March 2027 in New York; 0 9 1-7 * 1 warns that cron runs on days 1-7 OR on Mondays; an AWS cron with a wrap-around hour range is explained; 0 9 32 * * is refused with the day-of-month field marked in red; the Monitor tab lists four jobs, the failed and the late one first, with their next expected ping](docs/screenshots/demo.gif)
 
@@ -19,6 +19,7 @@ go install github.com/Habibeyilmazz/cronplain@latest
 
 cronplain explain "0 9 1-7 * 1"
 cronplain audit /etc/crontab -system
+cronplain audit .github/workflows/*.yml   # the schedules of GitHub Actions workflows
 cronplain serve            # dashboard on http://127.0.0.1:4230
 crontab -l | cronplain import - > crontab.new   # monitor every job: review, then install with crontab crontab.new
 ```
@@ -110,7 +111,23 @@ $ cronplain audit examples/crontab.sample
 ```
 
 Checks: schedule errors and the lint warnings above, `PATH` and `SHELL` not set (escalated when a command uses bash syntax), output not redirected (or discarded by `MAILTO=""`; `2>/dev/null` or `2>&1` alone still mails stdout), a part of a `;` or `&&` list left unredirected (`a > log; b` mails b's output; a part after `||` counts as a deliberate failure mail), only stdout redirected, unescaped `%`, the same command on two lines, frequent jobs without `flock`, a UTF-8 byte order mark, Windows (CRLF) line endings, a last line without a newline, lines copied between `/etc/crontab` and a user crontab (`root` as the command, or no user field with `-system`), a `TZ=` line (it does not change when cron runs the jobs; cronie reads `CRON_TZ=`), and start-time collisions over the next 7 days (three or more jobs in the same minute is a warning).
-Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user field after the schedule; one file per run), `-` to read stdin, `-json` for machines. The exit code is 1 when there is any warning or error, so it can gate CI.
+Use `-system` for the format of `/etc/crontab` and files in `/etc/cron.d/` (user field after the schedule), `-` to read stdin, `-json` for machines. Several files can be audited in one run (`cronplain audit /etc/cron.d/*`); each gets its own report, and `-json` then prints a list of reports with a `file` field. The exit code is 1 when any file has a warning or error, so it can gate CI.
+
+#### GitHub Actions workflows
+
+A file with a `- cron:` line or a top-level `on:` or `jobs:` key is read as a GitHub Actions workflow instead of a crontab, so `cronplain audit .github/workflows/*.yml` checks every scheduled workflow of a repository (workflows without a schedule pass with 0 schedules):
+
+```text
+$ cronplain audit examples/nightly.yml
+3 schedule(s) in a GitHub Actions workflow: 1 error(s), 1 warning(s), 3 note(s)
+  line 5   info  0 0 * * *: GitHub Actions evaluates schedules in UTC.
+  line 5   info  0 0 * * *: Minute 0 is the busiest time on GitHub Actions and runs are often delayed or dropped; an odd minute such as 17 is more punctual.
+  line 5   info  0 0 * * *: Scheduled workflows run on the default branch only, and GitHub disables them in public repositories after 60 days without activity.
+  line 6   warn  */2 * * * *: GitHub Actions does not run scheduled workflows more often than once every 5 minutes.
+  line 7   error the schedule starts with * but is not quoted: YAML reads *... as an alias, so GitHub rejects the workflow; quote it: - cron: '*/30 9-17 * * 1-5'
+```
+
+Each `- cron:` line is checked like `explain -dialect github-actions` would: invalid fields, macros such as `@daily` (GitHub does not take them), the lints above (more often than every 5 minutes, never fires, the either-day rule, minute 0), plus an unquoted schedule that starts with `*` and the same schedule listed twice. Notes that are the same for every line (UTC, default branch) are printed once. cronplain does not parse YAML: it reads `- cron: '...'` lines, one per line, and says so for a flow-style `schedule: [{cron: ...}]` it skipped. `cronplain import` refuses a workflow, since its runs happen on GitHub.
 
 ### Heartbeat monitor
 
@@ -214,7 +231,7 @@ Ideas, not promises:
 - Optional token so pings can come from other machines through a reverse proxy.
 - A short ping history per job, and a `/start` ping to measure how long a run takes.
 - A static, offline build of the explainer page (today it is served by `cronplain serve`; the schedule math exists only in Go, so this needs a WebAssembly build or a port).
-- Explaining several `cron:` lines of one workflow at once (today a pasted snippet must have exactly one).
+- Explaining several `cron:` lines of one workflow at once (today `explain` takes a snippet with exactly one; `audit` checks them all but lists no run times).
 
 ## Contributing
 

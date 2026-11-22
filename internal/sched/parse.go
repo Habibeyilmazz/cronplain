@@ -145,7 +145,7 @@ func Parse(expr string, d Dialect) (*Schedule, error) {
 		case 1:
 			text = crons[0]
 		default:
-			return nil, fmt.Errorf("%d cron: lines: explain them one at a time", len(crons))
+			return nil, fmt.Errorf("%d cron: lines: explain them one at a time, or check them all with cronplain audit WORKFLOW.yml", len(crons))
 		}
 	}
 	// GitHub Actions YAML: "- cron: '0 9 * * 1'"
