@@ -301,6 +301,9 @@ func runImport(args []string, stdin io.Reader, w, log io.Writer) (int, error) {
 	if !pingBase.MatchString(*base) {
 		return 2, fmt.Errorf("-url must be a plain http(s) address such as http://127.0.0.1:4230")
 	}
+	if *grace < 0 || *grace > 7*24*time.Hour { // the monitor's own limit, see Job.Validate
+		return 2, fmt.Errorf("-grace must be between 0s and 168h (7 days)")
+	}
 	loc, err := loadZone(*tz)
 	if err != nil {
 		return 2, err

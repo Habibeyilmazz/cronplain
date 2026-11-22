@@ -171,4 +171,8 @@ func TestImportCommand(t *testing.T) {
 			t.Errorf("%q: exit %d, want 2", args, code)
 		}
 	}
+	// A bad -grace is the flag's fault, not line 1's, and is refused even for an empty crontab.
+	if code, err := runImport([]string{"-dry-run", "-grace", "200h", "-"}, strings.NewReader(""), io.Discard, io.Discard); code != 2 || err == nil || !strings.HasPrefix(err.Error(), "-grace") {
+		t.Errorf("-grace 200h: exit %d, err %v", code, err)
+	}
 }
