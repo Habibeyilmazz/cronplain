@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (design round 10; each seen in screenshots of the running app first)
+- `audit` missed `a > log; b`: any `>` on the line counted as handled output, but a redirect binds to one command of a `;` or `&&` list, so b's output is still mailed. Each part of such a list is now checked; `cd`, `test`/`[`, `true`, `sleep`, `export` and a silent `curl`/`wget` (the README's ping line) count as quiet, a part after `||` counts as a deliberate failure mail (`|| echo failed`), `{ a; b; } > log` and quoted `;` are not split, and `if ...; then ...; fi` lines are left out.
+- Dashboard on phones: "Last success: never failed 2 min ago" read as "never failed"; the failure time now has its own line.
+- Dashboard: "cronplain is not reachable" in the job list was grey (a CSS rule order slip); it is red like the other errors.
+- The Syntax select was 2 px shorter than the inputs beside it and the Add job button 2 px taller; they now line up.
+
+### Changed (design round 10)
+- An invalid schedule marks the field the error names in the field row under the input (`0 9 32 * *`: "32 / day of month" in red, beside "day-of-month: 32 is out of range 1-31"), where the row used to be empty. Only when the layout is certain: a chosen syntax, or five fields on Detect.
+- Monitor lists failed and late jobs first (then the rest by name), and while the Monitor tab is open the browser tab title counts them: `(2) cronplain`.
+- README screenshots (`explain.png`, `monitor.png`, `monitor-mobile.png`) and `demo.gif` retaken from the running app; the GIF now also shows the marked field and the new order.
+
+### Notes for the next person (round 10)
+- Looked at and left as is: light and dark at 1280 and 390 px for the explainer (result, DST note, error), the monitor (all four states, empty, server stopped) and keyboard focus on chips and buttons. Typography and palette (system sans, mono for expressions, one blue accent, ochre for clock changes) are consistent and were not restyled. The only motion is a 150 ms opacity change, already behind `prefers-reduced-motion: no-preference`.
+- axe-core 4.10.2 (WCAG 2.2 AA + best practices): no violations in light/dark at 1280/390 for the explain result, the explain error with a marked field and the monitor. Run from a scratch folder as in round 8.
+- Screenshots and GIF: `serve -addr 127.0.0.1:4230` with four synthetic jobs (`queue-poller` `*/2 * * * *` with 0 grace, pinged once and left to go late; `nightly-backup` pinged `/1`), Playwright 1.65.1 at 1200x900 (monitor dark, explain light full page), 390x844 @2x (mobile), and a 1000x860 `recordVideo` turned into the GIF with the round 7 ffmpeg palette settings. The script was not added to the repo.
+- The CLI error for an invalid field still only names it (`cronplain: minute: 61 is out of range 0-59`); a caret under the field would need the field index from `sched`, left for later.
+- Reported gaps re-checked: a retry that fails at shutdown is still lost (documented `shortcut:`), no TypeScript explainer, AWS `L-n`/`LW` unverified. Codex hit its usage limit again.
+
 ### Fixed (first-run review, round 9; each reproduced from a fresh clone first)
 - The README's own ping line, `cmd; curl -fsS http://127.0.0.1:4230/ping/ID/$?`, made cron send one email per run: the ping answered `OK`, curl printed it, and cron mails any output. A ping now answers 200 with an empty body, so a working ping prints nothing; a failed one (unknown job, `serve` down) still prints curl's error.
 - A stepped day-of-week or month read wrong: `0 0 * * */2` was "on every 2 days", but it runs Sunday, Tuesday, Thursday and Saturday (Saturday to Sunday is one day); `1-5/2` was "every 2 days from Monday through Friday". Both fields now list their days or months (`*/3` in months: "in January, April, July and October").
